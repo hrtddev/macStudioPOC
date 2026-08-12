@@ -17,6 +17,11 @@ leaveForm.addEventListener('submit', function(e) {
         return;
     }
     
+    if (annualEntitlement < 0 || leaveTaken < 0 || plannedLeave < 0) {
+        alert('Please enter non-negative values for all fields.');
+        return;
+    }
+    
     const availableLeave = annualEntitlement - leaveTaken;
     const remainingBalance = availableLeave - plannedLeave;
     
