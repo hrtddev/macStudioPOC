@@ -51,7 +51,7 @@ input[type="number"] {
 button {
     width: 100%;
     padding: 12px;
-    background-color: #28a745;
+    background-color: #fd7e14;
     color: white;
     border: none;
     border-radius: 4px;
@@ -61,7 +61,7 @@ button {
 }
 
 button:hover {
-    background-color: #218838;
+    background-color: #e66c00;
 }
 
 .result {
