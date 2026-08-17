@@ -4,12 +4,13 @@
     padding: 20px;
     font-family: Arial, sans-serif;
     line-height: 1.6;
-    background-color: #e6f0f9;
 }
 
 header {
     text-align: center;
     margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #eee;
 }
 
 h1 {
@@ -22,10 +23,7 @@ p {
 }
 
 main {
-    background-color: #f9f9f9;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 30px;
 }
 
 .form-group {
@@ -36,7 +34,7 @@ label {
     display: block;
     margin-bottom: 5px;
     font-weight: bold;
-    color: #333;
+    color: #444;
 }
 
 input[type="number"] {
@@ -51,7 +49,7 @@ input[type="number"] {
 button {
     width: 100%;
     padding: 12px;
-    background-color: #fd7e14;
+    background-color: #007bff;
     color: white;
     border: none;
     border-radius: 4px;
@@ -61,37 +59,20 @@ button {
 }
 
 button:hover {
-    background-color: #e66c00;
+    background-color: #0056b3;
 }
 
 .result {
     margin-top: 30px;
     padding: 20px;
-    background-color: #e9f7ef;
-    border-radius: 8px;
-    border-left: 4px solid #28a745;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border-left: 4px solid #007bff;
 }
 
-h2 {
-    margin-top: 0;
-    color: #333;
-}
-
-.balance-item {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 10px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #ddd;
-}
-
-.balance-item:last-child {
-    border-bottom: none;
-}
-
-.value {
-    font-weight: bold;
-    color: #333;
+.balance-info p {
+    margin: 10px 0;
+    font-size: 16px;
 }
 
 .warning {
@@ -101,7 +82,6 @@ h2 {
     border: 1px solid #ffeaa7;
     border-radius: 4px;
     color: #856404;
-    text-align: center;
 }
 
 .hidden {
@@ -110,9 +90,10 @@ h2 {
 
 footer {
     text-align: center;
-    margin-top: 30px;
-    color: #666;
+    padding: 20px;
+    color: #888;
     font-size: 14px;
+    border-top: 1px solid #eee;
 }
 
 @media (max-width: 600px) {
@@ -120,12 +101,15 @@ footer {
         padding: 10px;
     }
     
-    main {
-        padding: 15px;
+    h1 {
+        font-size: 24px;
     }
     
-    .balance-item {
-        flex-direction: column;
-        gap: 5px;
+    input[type="number"] {
+        font-size: 16px;
+    }
+    
+    button {
+        font-size: 16px;
     }
 }
