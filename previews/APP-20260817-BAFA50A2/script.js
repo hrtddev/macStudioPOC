@@ -1,4 +1,4 @@
-const targetNumber = Math.floor(Math.random() * 100) + 1;
+const targetNumber = Math.floor(Math.random() * 50) + 1;
 let guesses = [];
 let gameActive = true;
 
@@ -27,8 +27,8 @@ function validateGuess(guess) {
     if (!Number.isInteger(Number(guess))) {
         return { valid: false, message: 'Please enter a whole number.' };
     }
-    if (guess < 1 || guess > 100) {
-        return { valid: false, message: 'Please enter a number between 1 and 100.' };
+    if (guess < 1 || guess > 50) {
+        return { valid: false, message: 'Please enter a number between 1 and 50.' };
     }
     return { valid: true };
 }
@@ -68,12 +68,12 @@ function processGuess() {
 }
 
 function startNewGame() {
-    const newTargetNumber = Math.floor(Math.random() * 100) + 1;
+    const newTargetNumber = Math.floor(Math.random() * 50) + 1;
     targetNumber = newTargetNumber;
     guesses = [];
     gameActive = true;
     updateGuessesList();
-    showMessage('New game started! Guess a number between 1 and 100.');
+    showMessage('New game started! Guess a number between 1 and 50.');
     guessInput.value = '';
     guessInput.focus();
 }
@@ -87,4 +87,4 @@ guessInput.addEventListener('keyup', (event) => {
     }
 });
 
-showMessage('Guess a number between 1 and 100!');
+showMessage('Guess a number between 1 and 50!');
