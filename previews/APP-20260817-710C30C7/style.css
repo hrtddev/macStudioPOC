@@ -1,0 +1,171 @@
+.container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    text-align: center;
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+h1 {
+    font-size: 2.5rem;
+    margin-bottom: 20px;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.score-board {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    margin-bottom: 30px;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 20px;
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.score h2 {
+    margin: 0 0 10px 0;
+    font-size: 1.5rem;
+}
+
+.score p {
+    font-size: 2rem;
+    margin: 0;
+    font-weight: bold;
+}
+
+.choices {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    margin-bottom: 30px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.choice-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 15px;
+    padding: 20px;
+    width: 120px;
+    height: 120px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    color: white;
+    font-size: 1rem;
+    font-weight: bold;
+}
+
+.choice-btn:hover {
+    transform: translateY(-5px);
+    background: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.choice-btn:active {
+    transform: translateY(0);
+}
+
+.emoji {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+}
+
+.label {
+    font-size: 1.1rem;
+}
+
+.result-container {
+    width: 100%;
+    margin-bottom: 30px;
+}
+
+.result {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 20px;
+    border-radius: 15px;
+    font-size: 1.5rem;
+    min-height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.reset-container {
+    margin-top: 20px;
+}
+
+#reset-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    border-radius: 15px;
+    padding: 15px 30px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    color: white;
+    font-weight: bold;
+}
+
+#reset-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+}
+
+@media (max-width: 600px) {
+    .container {
+        padding: 10px;
+    }
+    
+    h1 {
+        font-size: 2rem;
+    }
+    
+    .score-board {
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+    }
+    
+    .choices {
+        justify-content: center;
+    }
+    
+    .choice-btn {
+        width: 100px;
+        height: 100px;
+        padding: 15px;
+    }
+    
+    .emoji {
+        font-size: 2rem;
+    }
+    
+    .label {
+        font-size: 0.9rem;
+    }
+    
+    .result {
+        font-size: 1.2rem;
+        min-height: 60px;
+    }
+}
