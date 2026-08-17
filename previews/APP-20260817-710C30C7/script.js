@@ -3,6 +3,7 @@ const computerScoreEl = document.getElementById('computer-score');
 const resultEl = document.getElementById('result');
 const choiceButtons = document.querySelectorAll('.choice-btn');
 const resetBtn = document.getElementById('reset-btn');
+const computerChoiceEl = document.getElementById('computer-choice');
 
 let playerScore = 0;
 let computerScore = 0;
@@ -66,6 +67,8 @@ function playRound(playerChoice) {
             <p>Computer chose ${emojis[computerChoice]} ${computerChoice}</p>
         `;
         
+        computerChoiceEl.textContent = `${emojis[computerChoice]} ${computerChoice}`;
+        
         updateScore(winner);
     }, 1000);
 }
@@ -76,6 +79,7 @@ function resetScore() {
     playerScoreEl.textContent = playerScore;
     computerScoreEl.textContent = computerScore;
     resultEl.innerHTML = '<p>Make your choice!</p>';
+    computerChoiceEl.textContent = '';
 }
 
 choiceButtons.forEach(button => {
