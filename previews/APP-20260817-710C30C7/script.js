@@ -53,12 +53,21 @@ function playRound(playerChoice) {
     const computerChoice = getComputerChoice();
     const winner = determineWinner(playerChoice, computerChoice);
     
+    // Show thinking animation
     resultEl.innerHTML = `
         <p>You chose ${emojis[playerChoice]} ${playerChoice}</p>
-        <p>Computer chose ${emojis[computerChoice]} ${computerChoice}</p>
+        <p>Computer is thinking... 🤔</p>
     `;
     
-    updateScore(winner);
+    // Add delay to show thinking
+    setTimeout(() => {
+        resultEl.innerHTML = `
+            <p>You chose ${emojis[playerChoice]} ${playerChoice}</p>
+            <p>Computer chose ${emojis[computerChoice]} ${computerChoice}</p>
+        `;
+        
+        updateScore(winner);
+    }, 1000);
 }
 
 function resetScore() {
