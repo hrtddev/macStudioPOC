@@ -1,8 +1,8 @@
 const leaveForm = document.getElementById('leaveForm');
 const resultDiv = document.getElementById('result');
 const availableLeaveSpan = document.getElementById('availableLeave');
-const plannedLeaveResultSpan = document.getElementById('plannedLeaveResult');
-const remainingBalanceSpan = document.getElementById('remainingBalance');
+const totalUsedSpan = document.getElementById('totalUsed');
+const remainingLeaveSpan = document.getElementById('remainingLeave');
 const warningDiv = document.getElementById('warning');
 
 leaveForm.addEventListener('submit', function(e) {
@@ -17,17 +17,13 @@ leaveForm.addEventListener('submit', function(e) {
         return;
     }
     
-    if (annualEntitlement < 0 || leaveTaken < 0 || plannedLeave < 0) {
-        alert('Please enter non-negative values for all fields.');
-        return;
-    }
-    
     const availableLeave = annualEntitlement - leaveTaken;
-    const remainingBalance = availableLeave - plannedLeave;
+    const totalUsed = leaveTaken + plannedLeave;
+    const remainingLeave = availableLeave - plannedLeave;
     
-    availableLeaveSpan.textContent = availableLeave.toFixed(1) + ' days';
-    plannedLeaveResultSpan.textContent = plannedLeave.toFixed(1) + ' days';
-    remainingBalanceSpan.textContent = remainingBalance.toFixed(1) + ' days';
+    availableLeaveSpan.textContent = availableLeave.toFixed(1);
+    totalUsedSpan.textContent = totalUsed.toFixed(1);
+    remainingLeaveSpan.textContent = remainingLeave.toFixed(1);
     
     if (plannedLeave > availableLeave) {
         warningDiv.classList.remove('hidden');
