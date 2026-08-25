@@ -37,7 +37,7 @@
   .ocr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0;}
   .ocr-item{background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;}
   .ocr-item .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:600;}
-  .ocr-item .val{font-size:18px;font-weight:700;color:var(--blue);margin-top:4px;letter-spacing:0.5px;}
+  .ocr-item .val{font-size:16px;font-weight:700;color:var(--blue);margin-top:4px;word-break:break-all;}
 
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);}
@@ -54,19 +54,20 @@
   .muted{color:var(--muted);font-size:12px;}
   .hidden{display:none !important;}
 
-  .modal-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:20px 16px;box-sizing:border-box;}
-  .modal-header{width:100%;max-width:440px;display:flex;justify-content:space-between;align-items:center;color:#fff;}
+  .modal-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:12px 16px;box-sizing:border-box;}
+  .modal-header{width:100%;max-width:440px;display:flex;justify-content:space-between;align-items:center;color:#fff;margin-bottom:10px;}
   .modal-header h3{margin:0;font-size:16px;}
   
-  .view-box{position:relative;width:100%;max-width:440px;aspect-ratio:1.33/1;border-radius:12px;overflow:hidden;border:2px solid #444;background:#000;margin:auto 0;}
+  .view-box{position:relative;width:100%;max-width:440px;aspect-ratio:1.33/1;border-radius:12px;overflow:hidden;border:2px solid #444;background:#000;margin-bottom:12px;}
   .view-box video{width:100%;height:100%;object-fit:cover;}
   
   .card-guide{position:absolute;top:10%;left:8%;width:84%;height:80%;border:2px dashed #00e676;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);pointer-events:none;}
   .roi-guide{position:absolute;top:48%;left:36%;width:58%;height:34%;border:2px solid #2783DE;background:rgba(39,131,222,0.25);pointer-events:none;border-radius:4px;}
 
-  .modal-footer{width:100%;max-width:440px;text-align:center;margin-bottom:10px;}
-  .status-text{color:#00e676;font-size:13px;font-weight:600;min-height:20px;margin-bottom:12px;}
-  .btn-snap{width:100%;background:#2783DE;color:#fff;border:0;border-radius:12px;padding:16px;font-size:16px;font-weight:700;cursor:pointer;}
+  .modal-footer{width:100%;max-width:440px;text-align:center;}
+  .status-text{color:#00e676;font-size:13px;font-weight:600;min-height:20px;margin-top:8px;}
+  .btn-snap{width:100%;background:#2783DE;color:#fff;border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;}
+  .btn-snap:disabled{background:#444;color:#888;}
 </style>
 </head>
 <body>
@@ -96,7 +97,7 @@
 
   <div id="ocrResultCard" class="card hidden">
     <h2>💳 Staff Number OCR Result</h2>
-    <p class="muted">Single-Line Engine + Contrast Normalization.</p>
+    <p class="muted">Live Frame Cropping + Tesseract Engine.</p>
       
     <div class="ocr-grid">
       <div class="ocr-item">
@@ -110,8 +111,8 @@
     </div>
 
     <div style="margin-top:10px;">
-      <div class="muted" style="font-weight:600;margin-bottom:4px;">Cropped Text Snippet:</div>
-      <div id="ocrRawText" class="result raw" style="background:#f1f5f9;padding:10px;border-radius:6px;">Waiting for scan trigger…</div>
+      <div class="muted" style="font-weight:600;margin-bottom:4px;">Raw OCR Text Output:</div>
+      <div id="ocrRawText" class="result raw" style="background:#f1f5f9;padding:10px;border-radius:6px;min-height:36px;">Waiting for scan trigger…</div>
     </div>
   </div>
 
@@ -145,8 +146,8 @@
   </div>
 
   <div class="modal-footer">
-    <div id="camStatus" class="status-text">Initializing camera…</div>
     <button id="snapOcrBtn" class="btn-snap hidden" disabled>📸 Hold Steady & Snap</button>
+    <div id="camStatus" class="status-text">Initializing camera…</div>
   </div>
 </div>
 
@@ -170,7 +171,6 @@
 
   function esc(s){return String(s==null?"":s).replace(/[&<>\"']/g,function(c){return {"&":"&","<":"<",">":">",'\"':"&quot;","'":"&#39;"}[c];});}
 
-  // --- API Communication Functions ---
   async function apiCall(action, payload){
     payload = payload || {};
     payload.action = action;
@@ -188,10 +188,10 @@
   async function loadRoster(){
     $("rosterBody").innerHTML='<tr><td colspan="5" class="muted">Loading roster from Notion…</td></tr>';
     var res = await apiCall("getRoster");
-    if(res.success){
+    if(res && res.success){
       onRoster(res.data);
     } else {
-      $("rosterBody").innerHTML='<tr><td colspan="5" style="color:#c62828">Failed to load: '+esc(res.error)+'</td></tr>';
+      $("rosterBody").innerHTML='<tr><td colspan="5" style="color:#c62828">Failed to load roster</td></tr>';
     }
   }
 
@@ -223,7 +223,6 @@
     $("cPending").textContent=roster.length-present;
   }
 
-  // --- Native Live WebRTC Camera Stream ---
   async function openCamera(mode){
     currentMode = mode;
     $("camModal").classList.remove("hidden");
@@ -294,31 +293,31 @@
     qrAnimationId = requestAnimationFrame(tickQr);
   }
 
-  // --- OCR Engine ---
   async function initOcrEngine(){
     if(ocrWorker) return;
     try {
+      $("camStatus").textContent = "Loading OCR Engine…";
       ocrWorker = await Tesseract.createWorker("eng");
       await ocrWorker.setParameters({
-        tessedit_pageseg_mode: "7",
-        tessedit_char_whitelist: "StaffNo.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZValiduntil"
+        tessedit_pageseg_mode: "11" // Sparse text mode
       });
-      if(currentMode === "ocr" && activeStream) $("snapOcrBtn").disabled = false;
+      if(currentMode === "ocr" && activeStream){
+        $("snapOcrBtn").disabled = false;
+        $("camStatus").textContent = "Ready. Hold steady & tap button.";
+      }
     } catch(e) {
-      console.error("OCR Load Error:", e);
+      $("camStatus").textContent = "OCR Load Error: " + e.message;
     }
   }
 
   function cleanStaffNo(rawVal){
     if(!rawVal) return null;
     var s = rawVal.trim().toUpperCase();
-    var m = s.match(/^([0-9OISBBLZG]{5,6})([A-Z]{0,2})$/);
+    var m = s.match(/([0-9OISBBLZG]{5,6}[A-Z]{0,2})/);
     if(!m) return s;
-    var digits = m[1];
-    var suffix = m[2];
+    var val = m[1];
     var map = {"O":"0","I":"1","L":"1","|":"1","S":"5","B":"8","Z":"2","G":"6"};
-    var fixedDigits = digits.split("").map(function(c){ return map[c] || c; }).join("");
-    return fixedDigits + suffix;
+    return val.split("").map(function(c){ return map[c] || c; }).join("");
   }
 
   async function captureAndAnalyze(){
@@ -330,24 +329,51 @@
     
     var v = $("webcam");
     if(v && v.readyState === v.HAVE_ENOUGH_DATA){ 
-      var canvas = document.createElement("canvas"); 
-      canvas.width = v.videoWidth; 
-      canvas.height = v.videoHeight;
-      var ctx = canvas.getContext("2d"); 
-      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+      // Crop only the blue ROI guide area from video
+      var vw = v.videoWidth;
+      var vh = v.videoHeight;
+      var rx = Math.floor(vw * 0.36);
+      var ry = Math.floor(vh * 0.48);
+      var rw = Math.floor(vw * 0.58);
+      var rh = Math.floor(vh * 0.34);
+
+      var cropCanvas = document.createElement("canvas"); 
+      cropCanvas.width = rw * 2; 
+      cropCanvas.height = rh * 2;
+      var ctx = cropCanvas.getContext("2d"); 
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(v, rx, ry, rw, rh, 0, 0, rw * 2, rh * 2);
       
       if(!ocrWorker) await initOcrEngine();
-      var res = await ocrWorker.recognize(canvas);
-      var text = (res.data && res.data.text) || "";
-      var match = text.match(/([0-9OISBBLZG]{5,6}[A-Z]{0,2})/i);
-      var extracted = match ? cleanStaffNo(match[1]) : null;
+      try {
+        var res = await ocrWorker.recognize(cropCanvas);
+        var rawText = (res.data && res.data.text) ? res.data.text.trim() : "";
 
-      $("ocrStaffNo").textContent = extracted || "—";
-      $("ocrStatus").textContent = extracted ? "✓ Extracted Successfully" : "No Match Found";
-      $("ocrStatus").style.color = extracted ? "#2e7d32" : "var(--ink)";
-      $("ocrRawText").textContent = text.trim() || "(No text in frame)";
-      
-      closeCamera();
+        // Display raw OCR text
+        $("ocrRawText").textContent = rawText || "(No text recognized in cropped box)";
+
+        var match = rawText.match(/([0-9OISBBLZG]{5,6}[A-Z]{0,2})/i);
+        var extracted = match ? cleanStaffNo(match[1]) : null;
+
+        if (extracted) {
+          $("ocrStaffNo").textContent = extracted;
+          $("ocrStatus").textContent = "✓ Extracted Successfully";
+          $("ocrStatus").style.color = "#2e7d32";
+        } else if (rawText.length > 0) {
+          $("ocrStaffNo").textContent = rawText;
+          $("ocrStatus").textContent = "Text Found (No Staff No. Format)";
+          $("ocrStatus").style.color = "#b26a00";
+        } else {
+          $("ocrStaffNo").textContent = "—";
+          $("ocrStatus").textContent = "No Text Found";
+          $("ocrStatus").style.color = "#c62828";
+        }
+
+        closeCamera();
+      } catch(err) {
+        alert("OCR Analysis Error: " + err.message);
+      }
     }
     
     isOcrProcessing = false; 
@@ -371,12 +397,12 @@
     
     var res = await apiCall("markPresent", { pageId: row.pageId });
     delete pending[row.pageId];
-    if(res.success){
+    if(res && res.success){
       row.status=res.status||"Present";
       renderRoster(); updateCounts();
       showResult("ok",row.name+" ✓ marked Present",row.dept+(row.jobTitle?" · "+row.jobTitle:""),raw);
     } else {
-      showResult("err",row.name+" — update failed",res.error,raw);
+      showResult("err",row.name+" — update failed",res ? res.error : "Network Error",raw);
     }
   }
 
