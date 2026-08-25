@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Course Attendance Scanner</title>
+<script src="https://cdn.jsdelivr.net/npm/jsQR@1.4.0/dist/jsQR.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root{--blue:#2783DE;--ink:#1f2328;--muted:#6b7280;--line:#e6e8eb;--bg:#f7f8fa;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);}
+  .wrap{max-width:820px;margin:0 auto;padding:20px 16px 48px;}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:4px;}
+  .logo{width:34px;height:34px;border-radius:9px;background:var(--blue);display:flex;align-items:center;justify-content:center;font-size:18px;}
+  h1{font-size:20px;margin:0;}
+  .sub{color:var(--muted);font-size:13px;margin:2px 0 18px;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px;}
+  .center{text-align:center;}
+  .hero-ico{font-size:40px;}
+  h2{font-size:17px;margin:10px 0 6px;}
+  p.lead{color:var(--muted);font-size:13px;max-width:480px;margin:0 auto 16px;}
+  .btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+  .btn{border:0;border-radius:9px;padding:12px 18px;font-size:14px;font-weight:600;cursor:pointer;}
+  .btn-primary{background:var(--blue);color:#fff;}
+  .btn-ocr{background:#009B8F;color:#fff;}
+  .btn-ghost{background:#eef1f4;color:var(--ink);}
+  .btn-close{background:#333;color:#fff;border:0;padding:8px 16px;border-radius:6px;font-size:14px;cursor:pointer;}
+  
+  .result{margin-top:14px;padding:14px;border-radius:10px;border:1px solid var(--line);font-size:14px;}
+  .result.ok{background:#eafaea;border-color:#bfe6bf;}
+  .result.err{background:#fdeaea;border-color:#f2c6c6;}
+  .result.warn{background:#fff6e6;border-color:#f0dcae;}
+  .result .who{font-weight:700;font-size:16px;}
+  .result .raw{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--muted);word-break:break-all;margin-top:4px;}
+    
+  .ocr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0;}
+  .ocr-item{background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;}
+  .ocr-item .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:600;}
+  .ocr-item .val{font-size:18px;font-weight:700;color:var(--blue);margin-top:4px;letter-spacing:0.5px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.02em;}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;}
+  .dept{color:#fff;}
+  .st-Present{background:#eafaea;color:#2e7d32;}
+  .st-Absent{background:#fdeaea;color:#c62828;}
+  .st-Late{background:#fff6e6;color:#b26a00;}
+  .st-none{background:#eef1f4;color:#6b7280;}
+  .counts{display:flex;gap:22px;flex-wrap:wrap;margin-bottom:12px;font-size:13px;color:var(--muted);}
+  .counts b{font-size:20px;display:block;color:var(--ink);}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+  .muted{color:var(--muted);font-size:12px;}
+  .hidden{display:none !important;}
+
+  .modal-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:20px 16px;box-sizing:border-box;}
+  .modal-header{width:100%;max-width:440px;display:flex;justify-content:space-between;align-items:center;color:#fff;}
+  .modal-header h3{margin:0;font-size:16px;}
+  
+  .view-box{position:relative;width:100%;max-width:440px;aspect-ratio:1.33/1;border-radius:12px;overflow:hidden;border:2px solid #444;background:#000;margin:auto 0;}
+  .view-box video{width:100%;height:100%;object-fit:cover;}
+  
+  .card-guide{position:absolute;top:10%;left:8%;width:84%;height:80%;border:2px dashed #00e676;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);pointer-events:none;}
+  .roi-guide{position:absolute;top:48%;left:36%;width:58%;height:34%;border:2px solid #2783DE;background:rgba(39,131,222,0.25);pointer-events:none;border-radius:4px;}
+
+  .modal-footer{width:100%;max-width:440px;text-align:center;margin-bottom:10px;}
+  .status-text{color:#00e676;font-size:13px;font-weight:600;min-height:20px;margin-bottom:12px;}
+  .btn-snap{width:100%;background:#2783DE;color:#fff;border:0;border-radius:12px;padding:16px;font-size:16px;font-weight:700;cursor:pointer;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="logo">🎟️</div>
+    <div>
+      <h1>Course Attendance Scanner</h1>
+      <div class="sub">Live sync with Notion Database</div>
+    </div>
+  </header>
+
+  <div id="landing" class="card center">
+    <div class="hero-ico">📷</div>
+    <h2>Ready to scan</h2>
+    <p class="lead">Scan an attendance QR code, or capture Staff Card OCR to extract Employee IDs.</p>
+    <div class="btn-row">
+      <button id="startQrBtn" class="btn btn-primary">📷 Open QR Scanner</button>
+      <button id="startOcrBtn" class="btn btn-ocr">💳 Open Staff No. OCR</button>
+    </div>
+  </div>
+
+  <div id="qrResultCard" class="card hidden">
+    <div id="result" class="result">Waiting for scan…</div>
+  </div>
+
+  <div id="ocrResultCard" class="card hidden">
+    <h2>💳 Staff Number OCR Result</h2>
+    <p class="muted">Single-Line Engine + Contrast Normalization.</p>
+      
+    <div class="ocr-grid">
+      <div class="ocr-item">
+        <div class="lbl">Extracted Staff No.</div>
+        <div class="val" id="ocrStaffNo">—</div>
+      </div>
+      <div class="ocr-item">
+        <div class="lbl">Status</div>
+        <div class="val" id="ocrStatus" style="font-size:14px;color:var(--ink);">Ready</div>
+      </div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <div class="muted" style="font-weight:600;margin-bottom:4px;">Cropped Text Snippet:</div>
+      <div id="ocrRawText" class="result raw" style="background:#f1f5f9;padding:10px;border-radius:6px;">Waiting for scan trigger…</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="counts">
+      <div><b id="cPresent">0</b> Present</div>
+      <div><b id="cTotal">0</b> Total</div>
+      <div><b id="cPending">0</b> Not yet present</div>
+    </div>
+    <div class="toolbar">
+      <button id="refreshBtn" class="btn btn-ghost">↻ Refresh from Notion</button>
+      <button id="exportBtn" class="btn btn-ghost">⬇ Export CSV</button>
+    </div>
+    <table>
+      <thead><tr><th>ID</th><th>Name</th><th>Department</th><th>Title</th><th>Status</th></tr></thead>
+      <tbody id="rosterBody"><tr><td colspan="5" class="muted">Loading roster from Notion…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="camModal" class="modal-overlay hidden">
+  <div class="modal-header">
+    <h3 id="modalTitle">Camera Scanner</h3>
+    <button id="closeModalBtn" class="btn-close">✕ Close</button>
+  </div>
+
+  <div class="view-box">
+    <video id="webcam" playsinline webkit-playsinline muted autoplay></video>
+    <div id="guideCard" class="card-guide hidden"></div>
+    <div id="guideRoi" class="roi-guide hidden"></div>
+  </div>
+
+  <div class="modal-footer">
+    <div id="camStatus" class="status-text">Initializing camera…</div>
+    <button id="snapOcrBtn" class="btn-snap hidden" disabled>📸 Hold Steady & Snap</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  
+  // PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
+  var GAS_URL = "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL";
+
+  var DEPT_COLORS={"Operations":"#2783DE","Engineering":"#D5803B","Corporate":"#9B6BD6","Property":"#46A171","Human Resources":"#DF84A8","Finance":"#EAC26B","Information Technology":"#E56458"};
+  var $=function(id){return document.getElementById(id);};
+  var roster=[], byToken={}, pending={};
+  var lastRaw="", lastAt=0;
+  
+  var currentMode = null;
+  var activeStream = null;
+  var qrAnimationId = null;
+  var ocrWorker = null;
+  var isOcrProcessing = false;
+
+  function esc(s){return String(s==null?"":s).replace(/[&<>\"']/g,function(c){return {"&":"&","<":"<",">":">",'\"':"&quot;","'":"&#39;"}[c];});}
+
+  // --- API Communication Functions ---
+  async function apiCall(action, payload){
+    payload = payload || {};
+    payload.action = action;
+    try {
+      var response = await fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      return await response.json();
+    } catch(e) {
+      return { success: false, error: e.toString() };
+    }
+  }
+
+  async function loadRoster(){
+    $("rosterBody").innerHTML='<tr><td colspan="5" class="muted">Loading roster from Notion…</td></tr>';
+    var res = await apiCall("getRoster");
+    if(res.success){
+      onRoster(res.data);
+    } else {
+      $("rosterBody").innerHTML='<tr><td colspan="5" style="color:#c62828">Failed to load: '+esc(res.error)+'</td></tr>';
+    }
+  }
+
+  function onRoster(rows){
+    roster=rows||[]; byToken={};
+    roster.forEach(function(r){ byToken[r.token]=r; });
+    renderRoster(); updateCounts();
+  }
+
+  function renderRoster(){
+    if(!roster.length){ $("rosterBody").innerHTML='<tr><td colspan="5" class="muted">No records found.</td></tr>'; return; }
+    var h="";
+    roster.forEach(function(r){
+      var dc=DEPT_COLORS[r.dept]||"#8894a3";
+      var st=r.status||"Not Marked";
+      var cls=st==="Present"?"st-Present":st==="Absent"?"st-Absent":st==="Late"?"st-Late":"st-none";
+      h+='<tr><td>'+esc(r.uid||"")+'</td><td>'+esc(r.name)+'</td>'+
+         '<td><span class="pill dept" style="background:'+dc+'">'+esc(r.dept||"—")+'</span></td>'+
+         '<td>'+esc(r.jobTitle||"")+'</td>'+
+         '<td><span class="pill '+cls+'">'+esc(st)+'</span></td></tr>';
+    });
+    $("rosterBody").innerHTML=h;
+  }
+
+  function updateCounts(){
+    var present=roster.filter(function(r){return r.status==="Present";}).length;
+    $("cPresent").textContent=present;
+    $("cTotal").textContent=roster.length;
+    $("cPending").textContent=roster.length-present;
+  }
+
+  // --- Native Live WebRTC Camera Stream ---
+  async function openCamera(mode){
+    currentMode = mode;
+    $("camModal").classList.remove("hidden");
+    $("camStatus").textContent = "Requesting camera access…";
+
+    if(mode === "qr"){
+      $("modalTitle").textContent = "Scan Attendance QR";
+      $("guideCard").classList.add("hidden");
+      $("guideRoi").classList.add("hidden");
+      $("snapOcrBtn").classList.add("hidden");
+      $("qrResultCard").classList.remove("hidden");
+    } else {
+      $("modalTitle").textContent = "Align Staff No. inside Blue Box";
+      $("guideCard").classList.remove("hidden");
+      $("guideRoi").classList.remove("hidden");
+      $("snapOcrBtn").classList.remove("hidden");
+      $("snapOcrBtn").disabled = true;
+      $("ocrResultCard").classList.remove("hidden");
+      initOcrEngine();
+    }
+
+    try {
+      var constraints = { video: { facingMode: { ideal: "environment" } }, audio: false };
+      activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+      var video = $("webcam");
+      video.srcObject = activeStream;
+      await video.play();
+
+      if(mode === "qr"){
+        $("camStatus").textContent = "Scanning for QR code…";
+        tickQr();
+      } else {
+        if(ocrWorker) $("snapOcrBtn").disabled = false;
+        $("camStatus").textContent = "Ready. Hold steady & tap button.";
+      }
+    } catch(err) {
+      $("camStatus").textContent = "Camera Error: " + err.message;
+    }
+  }
+
+  function closeCamera(){
+    if(qrAnimationId) cancelAnimationFrame(qrAnimationId);
+    if(activeStream){
+      activeStream.getTracks().forEach(function(t){ t.stop(); });
+      activeStream = null;
+    }
+    $("webcam").srcObject = null;
+    $("camModal").classList.add("hidden");
+    currentMode = null;
+  }
+
+  function tickQr(){
+    var video = $("webcam");
+    if(video.readyState === video.HAVE_ENOUGH_DATA){
+      var canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      var ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var code = jsQR(img.data, img.width, img.height);
+      if(code && code.data){
+        handleCode(code.data);
+        closeCamera();
+        return;
+      }
+    }
+    qrAnimationId = requestAnimationFrame(tickQr);
+  }
+
+  // --- OCR Engine ---
+  async function initOcrEngine(){
+    if(ocrWorker) return;
+    try {
+      ocrWorker = await Tesseract.createWorker("eng");
+      await ocrWorker.setParameters({
+        tessedit_pageseg_mode: "7",
+        tessedit_char_whitelist: "StaffNo.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZValiduntil"
+      });
+      if(currentMode === "ocr" && activeStream) $("snapOcrBtn").disabled = false;
+    } catch(e) {
+      console.error("OCR Load Error:", e);
+    }
+  }
+
+  function cleanStaffNo(rawVal){
+    if(!rawVal) return null;
+    var s = rawVal.trim().toUpperCase();
+    var m = s.match(/^([0-9OISBBLZG]{5,6})([A-Z]{0,2})$/);
+    if(!m) return s;
+    var digits = m[1];
+    var suffix = m[2];
+    var map = {"O":"0","I":"1","L":"1","|":"1","S":"5","B":"8","Z":"2","G":"6"};
+    var fixedDigits = digits.split("").map(function(c){ return map[c] || c; }).join("");
+    return fixedDigits + suffix;
+  }
+
+  async function captureAndAnalyze(){
+    if(isOcrProcessing) return; 
+    isOcrProcessing = true;
+    var btn = $("snapOcrBtn");
+    btn.disabled = true; 
+    btn.textContent = "Processing OCR…";
+    
+    var v = $("webcam");
+    if(v && v.readyState === v.HAVE_ENOUGH_DATA){ 
+      var canvas = document.createElement("canvas"); 
+      canvas.width = v.videoWidth; 
+      canvas.height = v.videoHeight;
+      var ctx = canvas.getContext("2d"); 
+      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+      
+      if(!ocrWorker) await initOcrEngine();
+      var res = await ocrWorker.recognize(canvas);
+      var text = (res.data && res.data.text) || "";
+      var match = text.match(/([0-9OISBBLZG]{5,6}[A-Z]{0,2})/i);
+      var extracted = match ? cleanStaffNo(match[1]) : null;
+
+      $("ocrStaffNo").textContent = extracted || "—";
+      $("ocrStatus").textContent = extracted ? "✓ Extracted Successfully" : "No Match Found";
+      $("ocrStatus").style.color = extracted ? "#2e7d32" : "var(--ink)";
+      $("ocrRawText").textContent = text.trim() || "(No text in frame)";
+      
+      closeCamera();
+    }
+    
+    isOcrProcessing = false; 
+    btn.disabled = false; 
+    btn.textContent = "📸 Hold Steady & Snap";
+  }
+
+  async function handleCode(raw){
+    if(!raw) return;
+    var now=Date.now();
+    if(raw===lastRaw && now-lastAt<2500) return;
+    lastRaw=raw; lastAt=now;
+    var token=raw.replace(/-/g,"").toLowerCase();
+    var m=token.match(/[0-9a-f]{32}/); if(m) token=m[0];
+    var row=byToken[token];
+    if(!row){ showResult("err","No match","This QR code is not an attendance token in the database.",raw); return; }
+    if(row.status==="Present"){ showResult("ok",row.name+" ✓ already Present",row.dept+(row.jobTitle?" · "+row.jobTitle:""),raw); return; }
+    if(pending[row.pageId]) return;
+    pending[row.pageId]=true;
+    showResult("warn",row.name,"Marking Present in Notion…",raw);
+    
+    var res = await apiCall("markPresent", { pageId: row.pageId });
+    delete pending[row.pageId];
+    if(res.success){
+      row.status=res.status||"Present";
+      renderRoster(); updateCounts();
+      showResult("ok",row.name+" ✓ marked Present",row.dept+(row.jobTitle?" · "+row.jobTitle:""),raw);
+    } else {
+      showResult("err",row.name+" — update failed",res.error,raw);
+    }
+  }
+
+  function showResult(kind,who,detail,raw){
+    var el=$("result");
+    el.className="result "+(kind||"");
+    el.innerHTML='<div class="who">'+esc(who)+'</div><div>'+esc(detail||"")+'</div>'+(raw?'<div class="raw">'+esc(raw)+'</div>':"");
+  }
+
+  function exportCSV(){
+    var rows=[["ID","Name","Department","Title","Status"]];
+    roster.forEach(function(r){ rows.push([r.uid||"",r.name,r.dept||"",r.jobTitle||"",r.status||"Not Marked"]); });
+    var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c).replace(/"/g,'""')+'"';}).join(",");}).join("\n");
+    var blob=new Blob([csv],{type:"text/csv"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");a.href=url;a.download="attendance.csv";document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(url);},1500);
+  }
+
+  $("startQrBtn").addEventListener("click", function(){ openCamera("qr"); });
+  $("startOcrBtn").addEventListener("click", function(){ openCamera("ocr"); });
+  $("closeModalBtn").addEventListener("click", closeCamera);
+  $("snapOcrBtn").addEventListener("click", captureAndAnalyze);
+  $("refreshBtn").addEventListener("click", loadRoster);
+  $("exportBtn").addEventListener("click", exportCSV);
+
+  loadRoster();
+})();
+</script>
+</body>
+</html>
