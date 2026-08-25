@@ -54,12 +54,14 @@
   .muted{color:var(--muted);font-size:12px;}
   .hidden{display:none !important;}
 
-  /* INLINE CAMERA VIEWER */
+  /* INLINE CAMERA VIEWER & GREEN DOTTED CARD GUIDE */
   .cam-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
   .cam-card-header h3{margin:0;font-size:16px;}
 
   .view-box{position:relative;width:100%;max-width:500px;aspect-ratio:1.33/1;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#000;margin:0 auto 12px;}
   .view-box video{width:100%;height:100%;object-fit:cover;}
+
+  .card-guide{position:absolute;top:10%;left:8%;width:84%;height:80%;border:2px dashed #00e676;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,0.35);pointer-events:none;}
 
   .status-text{color:#009B8F;font-size:13px;font-weight:600;min-height:20px;margin-top:8px;}
   .btn-snap{width:100%;background:#009B8F;color:#fff;border:0;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;}
@@ -87,7 +89,7 @@
     </div>
   </div>
 
-  <!-- INLINE CAMERA CONTAINER (Loaded directly inside page flow) -->
+  <!-- INLINE CAMERA CONTAINER -->
   <div id="camCard" class="card hidden">
     <div class="cam-card-header">
       <h3 id="camTitle">Camera Scanner</h3>
@@ -96,6 +98,7 @@
 
     <div class="view-box">
       <video id="webcam" playsinline webkit-playsinline muted autoplay></video>
+      <div id="guideCard" class="card-guide hidden"></div>
     </div>
 
     <div style="text-align:center;">
@@ -218,7 +221,6 @@
     $("cPending").textContent=roster.length-present;
   }
 
-  // --- Inline Camera Initialization ---
   async function openCamera(mode){
     currentMode = mode;
     $("camCard").classList.remove("hidden");
@@ -226,10 +228,12 @@
 
     if(mode === "qr"){
       $("camTitle").textContent = "📷 Scan Attendance QR";
+      $("guideCard").classList.add("hidden");
       $("snapOcrBtn").classList.add("hidden");
       $("qrResultCard").classList.remove("hidden");
     } else {
       $("camTitle").textContent = "💳 Scan Staff Card OCR";
+      $("guideCard").classList.remove("hidden");
       $("snapOcrBtn").classList.remove("hidden");
       $("snapOcrBtn").disabled = true;
       $("ocrResultCard").classList.remove("hidden");
@@ -237,7 +241,6 @@
     }
 
     try {
-      // FRONT CAMERA CONSTRAINT ("user")
       var constraints = { video: { facingMode: { ideal: "user" } }, audio: false };
       activeStream = await navigator.mediaDevices.getUserMedia(constraints);
       var video = $("webcam");
@@ -249,7 +252,7 @@
         tickQr();
       } else {
         if(ocrWorker) $("snapOcrBtn").disabled = false;
-        $("camStatus").textContent = "Hold staff card in view & tap snap.";
+        $("camStatus").textContent = "Align card in green box & tap snap.";
       }
     } catch(err) {
       $("camStatus").textContent = "Camera Error: " + err.message;
@@ -296,7 +299,7 @@
       });
       if(currentMode === "ocr" && activeStream){
         $("snapOcrBtn").disabled = false;
-        $("camStatus").textContent = "Hold staff card in view & tap snap.";
+        $("camStatus").textContent = "Align card in green box & tap snap.";
       }
     } catch(e) {
       $("camStatus").textContent = "OCR Load Error: " + e.message;
@@ -325,7 +328,6 @@
       var vw = v.videoWidth;
       var vh = v.videoHeight;
 
-      // Full frame capture canvas
       var fullCanvas = document.createElement("canvas"); 
       var scale = Math.min(1200 / vw, 1200 / vh, 1);
       fullCanvas.width = vw * scale; 
