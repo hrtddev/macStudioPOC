@@ -54,12 +54,12 @@
   .muted{color:var(--muted);font-size:12px;}
   .hidden{display:none !important;}
 
-  /* INLINE CAMERA VIEWER & FRONT CAMERA MIRROR FIX */
+  /* CAMERA & GUIDE OVERLAY */
   .cam-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
   .cam-card-header h3{margin:0;font-size:16px;}
 
   .view-box{position:relative;width:100%;max-width:500px;aspect-ratio:1.33/1;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#000;margin:0 auto 12px;}
-  .view-box video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);} /* Mirror live preview */
+  .view-box video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);} /* Live mirror */
 
   .card-guide{position:absolute;top:10%;left:8%;width:84%;height:80%;border:2px dashed #00e676;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,0.35);pointer-events:none;}
 
@@ -89,7 +89,6 @@
     </div>
   </div>
 
-  <!-- INLINE CAMERA CONTAINER -->
   <div id="camCard" class="card hidden">
     <div class="cam-card-header">
       <h3 id="camTitle">Camera Scanner</h3>
@@ -113,7 +112,7 @@
 
   <div id="ocrResultCard" class="card hidden">
     <h2>💳 Staff Number OCR Result</h2>
-    <p class="muted">Front Camera Full-Frame Tesseract Engine.</p>
+    <p class="muted">Front Camera High-Contrast ROI Extraction.</p>
       
     <div class="ocr-grid">
       <div class="ocr-item">
@@ -153,7 +152,6 @@
 (function(){
   "use strict";
   
-  // PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
   var GAS_URL = "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL";
 
   var DEPT_COLORS={"Operations":"#2783DE","Engineering":"#D5803B","Corporate":"#9B6BD6","Property":"#46A171","Human Resources":"#DF84A8","Finance":"#EAC26B","Information Technology":"#E56458"};
@@ -278,7 +276,6 @@
       canvas.height = video.videoHeight;
       var ctx = canvas.getContext("2d");
       
-      // Un-flip for QR detection
       ctx.translate(canvas.width, 0);
       ctx.scale(-1, 1);
       
@@ -300,7 +297,8 @@
       $("camStatus").textContent = "Loading OCR Engine…";
       ocrWorker = await Tesseract.createWorker("eng");
       await ocrWorker.setParameters({
-        tessedit_pageseg_mode: "11"
+        tessedit_pageseg_mode: "6", // Assume uniform block of text
+        tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ "
       });
       if(currentMode === "ocr" && activeStream){
         $("snapOcrBtn").disabled = false;
@@ -321,6 +319,20 @@
     return val.split("").map(function(c){ return map[c] || c; }).join("");
   }
 
+  // Pre-process canvas: Grayscale & Contrast Enhancement
+  function preprocessCanvas(ctx, width, height) {
+    var imgData = ctx.getImageData(0, 0, width, height);
+    var d = imgData.data;
+    for (var i = 0; i < d.length; i += 4) {
+      // Grayscale luminance
+      var v = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      // High-contrast binarization
+      v = v > 120 ? 255 : 0;
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
   async function captureAndAnalyze(){
     if(isOcrProcessing) return; 
     isOcrProcessing = true;
@@ -333,27 +345,37 @@
       var vw = v.videoWidth;
       var vh = v.videoHeight;
 
-      var fullCanvas = document.createElement("canvas"); 
-      var scale = Math.min(1200 / vw, 1200 / vh, 1);
-      fullCanvas.width = vw * scale; 
-      fullCanvas.height = vh * scale;
-      
-      var ctx = fullCanvas.getContext("2d"); 
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      
-      // FLIP CANVAS HORIZONTALLY TO FIX REVERSE MIRRORED TEXT FROM FRONT CAMERA
-      ctx.translate(fullCanvas.width, 0);
-      ctx.scale(-1, 1);
+      // Un-flip full frame
+      var tempCanvas = document.createElement("canvas");
+      tempCanvas.width = vw;
+      tempCanvas.height = vh;
+      var tempCtx = tempCanvas.getContext("2d");
+      tempCtx.translate(vw, 0);
+      tempCtx.scale(-1, 1);
+      tempCtx.drawImage(v, 0, 0, vw, vh);
 
-      ctx.drawImage(v, 0, 0, fullCanvas.width, fullCanvas.height);
+      // Extract ROI inside green box (top:10%, left:8%, width:84%, height:80%)
+      var cropX = Math.floor(vw * 0.08);
+      var cropY = Math.floor(vh * 0.10);
+      var cropW = Math.floor(vw * 0.84);
+      var cropH = Math.floor(vh * 0.80);
+
+      var roiCanvas = document.createElement("canvas");
+      roiCanvas.width = cropW;
+      roiCanvas.height = cropH;
+      var roiCtx = roiCanvas.getContext("2d");
       
+      roiCtx.drawImage(tempCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+      
+      // Apply contrast thresholding to reduce front-camera sensor noise
+      preprocessCanvas(roiCtx, cropW, cropH);
+
       if(!ocrWorker) await initOcrEngine();
       try {
-        var res = await ocrWorker.recognize(fullCanvas);
+        var res = await ocrWorker.recognize(roiCanvas);
         var rawText = (res.data && res.data.text) ? res.data.text.trim() : "";
 
-        $("ocrRawText").textContent = rawText || "(No text recognized in camera frame)";
+        $("ocrRawText").textContent = rawText || "(No text recognized in cropped guide box)";
 
         var match = rawText.match(/([0-9OISBBLZG]{5,6}[A-Z]{0,2})/i);
         var extracted = match ? cleanStaffNo(match[1]) : null;
