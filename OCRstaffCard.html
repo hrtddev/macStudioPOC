@@ -25,7 +25,7 @@
   .btn-primary{background:var(--blue);color:#fff;}
   .btn-ocr{background:#009B8F;color:#fff;}
   .btn-ghost{background:#eef1f4;color:var(--ink);}
-  .btn-close{background:#333;color:#fff;border:0;padding:8px 16px;border-radius:6px;font-size:14px;cursor:pointer;}
+  .btn-close{background:#eef1f4;color:var(--ink);border:1px solid var(--line);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
   
   .result{margin-top:14px;padding:14px;border-radius:10px;border:1px solid var(--line);font-size:14px;}
   .result.ok{background:#eafaea;border-color:#bfe6bf;}
@@ -54,20 +54,16 @@
   .muted{color:var(--muted);font-size:12px;}
   .hidden{display:none !important;}
 
-  .modal-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:12px 16px;box-sizing:border-box;}
-  .modal-header{width:100%;max-width:440px;display:flex;justify-content:space-between;align-items:center;color:#fff;margin-bottom:10px;}
-  .modal-header h3{margin:0;font-size:16px;}
-  
-  .view-box{position:relative;width:100%;max-width:440px;aspect-ratio:1.33/1;border-radius:12px;overflow:hidden;border:2px solid #444;background:#000;margin-bottom:12px;}
-  .view-box video{width:100%;height:100%;object-fit:cover;}
-  
-  .card-guide{position:absolute;top:10%;left:8%;width:84%;height:80%;border:2px dashed #00e676;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);pointer-events:none;}
-  .roi-guide{position:absolute;top:48%;left:36%;width:58%;height:34%;border:2px solid #2783DE;background:rgba(39,131,222,0.25);pointer-events:none;border-radius:4px;}
+  /* INLINE CAMERA VIEWER */
+  .cam-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+  .cam-card-header h3{margin:0;font-size:16px;}
 
-  .modal-footer{width:100%;max-width:440px;text-align:center;}
-  .status-text{color:#00e676;font-size:13px;font-weight:600;min-height:20px;margin-top:8px;}
-  .btn-snap{width:100%;background:#2783DE;color:#fff;border:0;border-radius:12px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;}
-  .btn-snap:disabled{background:#444;color:#888;}
+  .view-box{position:relative;width:100%;max-width:500px;aspect-ratio:1.33/1;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#000;margin:0 auto 12px;}
+  .view-box video{width:100%;height:100%;object-fit:cover;}
+
+  .status-text{color:#009B8F;font-size:13px;font-weight:600;min-height:20px;margin-top:8px;}
+  .btn-snap{width:100%;background:#009B8F;color:#fff;border:0;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;}
+  .btn-snap:disabled{background:#94a3b8;color:#fff;}
 </style>
 </head>
 <body>
@@ -91,13 +87,30 @@
     </div>
   </div>
 
+  <!-- INLINE CAMERA CONTAINER (Loaded directly inside page flow) -->
+  <div id="camCard" class="card hidden">
+    <div class="cam-card-header">
+      <h3 id="camTitle">Camera Scanner</h3>
+      <button id="closeCamBtn" class="btn-close">✕ Close Camera</button>
+    </div>
+
+    <div class="view-box">
+      <video id="webcam" playsinline webkit-playsinline muted autoplay></video>
+    </div>
+
+    <div style="text-align:center;">
+      <button id="snapOcrBtn" class="btn-snap hidden" disabled>📸 Hold Steady & Snap</button>
+      <div id="camStatus" class="status-text">Initializing camera…</div>
+    </div>
+  </div>
+
   <div id="qrResultCard" class="card hidden">
     <div id="result" class="result">Waiting for scan…</div>
   </div>
 
   <div id="ocrResultCard" class="card hidden">
     <h2>💳 Staff Number OCR Result</h2>
-    <p class="muted">Live Frame Cropping + Tesseract Engine.</p>
+    <p class="muted">Front Camera Full-Frame Tesseract Engine.</p>
       
     <div class="ocr-grid">
       <div class="ocr-item">
@@ -130,24 +143,6 @@
       <thead><tr><th>ID</th><th>Name</th><th>Department</th><th>Title</th><th>Status</th></tr></thead>
       <tbody id="rosterBody"><tr><td colspan="5" class="muted">Loading roster from Notion…</td></tr></tbody>
     </table>
-  </div>
-</div>
-
-<div id="camModal" class="modal-overlay hidden">
-  <div class="modal-header">
-    <h3 id="modalTitle">Camera Scanner</h3>
-    <button id="closeModalBtn" class="btn-close">✕ Close</button>
-  </div>
-
-  <div class="view-box">
-    <video id="webcam" playsinline webkit-playsinline muted autoplay></video>
-    <div id="guideCard" class="card-guide hidden"></div>
-    <div id="guideRoi" class="roi-guide hidden"></div>
-  </div>
-
-  <div class="modal-footer">
-    <button id="snapOcrBtn" class="btn-snap hidden" disabled>📸 Hold Steady & Snap</button>
-    <div id="camStatus" class="status-text">Initializing camera…</div>
   </div>
 </div>
 
@@ -223,21 +218,18 @@
     $("cPending").textContent=roster.length-present;
   }
 
+  // --- Inline Camera Initialization ---
   async function openCamera(mode){
     currentMode = mode;
-    $("camModal").classList.remove("hidden");
-    $("camStatus").textContent = "Requesting camera access…";
+    $("camCard").classList.remove("hidden");
+    $("camStatus").textContent = "Requesting front camera access…";
 
     if(mode === "qr"){
-      $("modalTitle").textContent = "Scan Attendance QR";
-      $("guideCard").classList.add("hidden");
-      $("guideRoi").classList.add("hidden");
+      $("camTitle").textContent = "📷 Scan Attendance QR";
       $("snapOcrBtn").classList.add("hidden");
       $("qrResultCard").classList.remove("hidden");
     } else {
-      $("modalTitle").textContent = "Align Staff No. inside Blue Box";
-      $("guideCard").classList.remove("hidden");
-      $("guideRoi").classList.remove("hidden");
+      $("camTitle").textContent = "💳 Scan Staff Card OCR";
       $("snapOcrBtn").classList.remove("hidden");
       $("snapOcrBtn").disabled = true;
       $("ocrResultCard").classList.remove("hidden");
@@ -245,7 +237,8 @@
     }
 
     try {
-      var constraints = { video: { facingMode: { ideal: "environment" } }, audio: false };
+      // FRONT CAMERA CONSTRAINT ("user")
+      var constraints = { video: { facingMode: { ideal: "user" } }, audio: false };
       activeStream = await navigator.mediaDevices.getUserMedia(constraints);
       var video = $("webcam");
       video.srcObject = activeStream;
@@ -256,7 +249,7 @@
         tickQr();
       } else {
         if(ocrWorker) $("snapOcrBtn").disabled = false;
-        $("camStatus").textContent = "Ready. Hold steady & tap button.";
+        $("camStatus").textContent = "Hold staff card in view & tap snap.";
       }
     } catch(err) {
       $("camStatus").textContent = "Camera Error: " + err.message;
@@ -270,7 +263,7 @@
       activeStream = null;
     }
     $("webcam").srcObject = null;
-    $("camModal").classList.add("hidden");
+    $("camCard").classList.add("hidden");
     currentMode = null;
   }
 
@@ -299,11 +292,11 @@
       $("camStatus").textContent = "Loading OCR Engine…";
       ocrWorker = await Tesseract.createWorker("eng");
       await ocrWorker.setParameters({
-        tessedit_pageseg_mode: "11" // Sparse text mode
+        tessedit_pageseg_mode: "11"
       });
       if(currentMode === "ocr" && activeStream){
         $("snapOcrBtn").disabled = false;
-        $("camStatus").textContent = "Ready. Hold steady & tap button.";
+        $("camStatus").textContent = "Hold staff card in view & tap snap.";
       }
     } catch(e) {
       $("camStatus").textContent = "OCR Load Error: " + e.message;
@@ -329,29 +322,26 @@
     
     var v = $("webcam");
     if(v && v.readyState === v.HAVE_ENOUGH_DATA){ 
-      // Crop only the blue ROI guide area from video
       var vw = v.videoWidth;
       var vh = v.videoHeight;
-      var rx = Math.floor(vw * 0.36);
-      var ry = Math.floor(vh * 0.48);
-      var rw = Math.floor(vw * 0.58);
-      var rh = Math.floor(vh * 0.34);
 
-      var cropCanvas = document.createElement("canvas"); 
-      cropCanvas.width = rw * 2; 
-      cropCanvas.height = rh * 2;
-      var ctx = cropCanvas.getContext("2d"); 
+      // Full frame capture canvas
+      var fullCanvas = document.createElement("canvas"); 
+      var scale = Math.min(1200 / vw, 1200 / vh, 1);
+      fullCanvas.width = vw * scale; 
+      fullCanvas.height = vh * scale;
+      
+      var ctx = fullCanvas.getContext("2d"); 
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(v, rx, ry, rw, rh, 0, 0, rw * 2, rh * 2);
+      ctx.drawImage(v, 0, 0, fullCanvas.width, fullCanvas.height);
       
       if(!ocrWorker) await initOcrEngine();
       try {
-        var res = await ocrWorker.recognize(cropCanvas);
+        var res = await ocrWorker.recognize(fullCanvas);
         var rawText = (res.data && res.data.text) ? res.data.text.trim() : "";
 
-        // Display raw OCR text
-        $("ocrRawText").textContent = rawText || "(No text recognized in cropped box)";
+        $("ocrRawText").textContent = rawText || "(No text recognized in camera frame)";
 
         var match = rawText.match(/([0-9OISBBLZG]{5,6}[A-Z]{0,2})/i);
         var extracted = match ? cleanStaffNo(match[1]) : null;
@@ -424,7 +414,7 @@
 
   $("startQrBtn").addEventListener("click", function(){ openCamera("qr"); });
   $("startOcrBtn").addEventListener("click", function(){ openCamera("ocr"); });
-  $("closeModalBtn").addEventListener("click", closeCamera);
+  $("closeCamBtn").addEventListener("click", closeCamera);
   $("snapOcrBtn").addEventListener("click", captureAndAnalyze);
   $("refreshBtn").addEventListener("click", loadRoster);
   $("exportBtn").addEventListener("click", exportCSV);
