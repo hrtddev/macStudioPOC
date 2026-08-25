@@ -18,12 +18,20 @@
      Models (~10 MB, PP-OCRv5 mobile) download ONCE then cache offline.
      NOTE: must be served over HTTPS (GitHub Pages OK; not file://).
      ============================================================ -->
+<!-- IMPORTANT: onnxruntime-web JS and its .wasm binaries MUST be the SAME
+     version, otherwise ORT throws "no available backend found / initWasm
+     failed". We pin ONE version below for both:
+       - the JS: import map pins onnxruntime-web to esm.sh @ ORT_VER
+       - the WASM: ortOptions.wasmPaths (in JS) points to jsDelivr @ ORT_VER
+     If you ever see a WASM "magic word"/LinkError after a version bump,
+     make BOTH the number here and ORT_VER in the script agree. -->
 <script async src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js/dist/opencv.js"></script>
 <script type="importmap">
 {
   "imports": {
     "@techstark/opencv-js": "data:text/javascript,export default globalThis.cv;",
-    "@paddleocr/paddleocr-js": "https://esm.sh/@paddleocr/paddleocr-js@0.4.2?external=@techstark/opencv-js"
+    "onnxruntime-web": "https://esm.sh/onnxruntime-web@1.22.0?bundle",
+    "@paddleocr/paddleocr-js": "https://esm.sh/@paddleocr/paddleocr-js@0.4.2?external=@techstark/opencv-js,onnxruntime-web"
   }
 }
 </script>
@@ -180,6 +188,12 @@
   var ocrEngine = null;                // PaddleOCR instance
   var ocrLoading = false;
 
+  // ORT version — MUST match the onnxruntime-web pin in the import map above.
+  // wasmPaths tells ONNX Runtime where to fetch its .wasm binaries so it does
+  // not (incorrectly) look relative to the GitHub Pages origin.
+  var ORT_VER = "1.22.0";
+  var ORT_WASM_PATHS = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VER + "/dist/";
+
   // Green-guide ROI (matches .card-guide: top10% left8% w84% h80%)
   var ROI = { x:0.08, y:0.10, w:0.84, h:0.80 };
 
@@ -248,9 +262,13 @@
       var mod = await import("@paddleocr/paddleocr-js");
       var PaddleOCR = mod.PaddleOCR || (mod.default && mod.default.PaddleOCR);
       ocrEngine = await PaddleOCR.create({
+        worker: false,                 // main-thread mode: avoids cross-origin worker asset issues
         textDetectionModelName: "PP-OCRv5_mobile_det",
         textRecognitionModelName: "PP-OCRv5_mobile_rec",
-        ortOptions: { backend: "auto" }
+        ortOptions: {
+          backend: "wasm",             // force CPU/WASM (GitHub Pages has no COOP/COEP for threads/WebGPU)
+          wasmPaths: ORT_WASM_PATHS    // <-- the actual fix for "initWasm() failed"
+        }
       });
       if(currentMode === "ocr" && activeStream){
         $("snapOcrBtn").disabled = false;
