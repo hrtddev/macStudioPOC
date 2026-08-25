@@ -26,19 +26,18 @@
   .btn-ocr{background:#009B8F;color:#fff;}
   .btn-ghost{background:#eef1f4;color:var(--ink);}
   .btn-close{background:#eef1f4;color:var(--ink);border:1px solid var(--line);padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;}
-  
+
   .result{margin-top:14px;padding:14px;border-radius:10px;border:1px solid var(--line);font-size:14px;}
   .result.ok{background:#eafaea;border-color:#bfe6bf;}
   .result.err{background:#fdeaea;border-color:#f2c6c6;}
   .result.warn{background:#fff6e6;border-color:#f0dcae;}
   .result .who{font-weight:700;font-size:16px;}
-  .result .raw{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--muted);word-break:break-all;margin-top:4px;}
-    
+  .result .raw{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--muted);word-break:break-all;margin-top:4px;white-space:pre-wrap;}
+
   .ocr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:12px 0;}
   .ocr-item{background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;}
   .ocr-item .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:600;}
   .ocr-item .val{font-size:16px;font-weight:700;color:var(--blue);margin-top:4px;word-break:break-all;}
-
   table{width:100%;border-collapse:collapse;font-size:13px;}
   th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);}
   th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.02em;}
@@ -53,23 +52,20 @@
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
   .muted{color:var(--muted);font-size:12px;}
   .hidden{display:none !important;}
-
-  /* CAMERA & GUIDE OVERLAY */
+  /* INLINE CAMERA VIEWER & FRONT CAMERA MIRROR (PREVIEW ONLY) */
   .cam-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
   .cam-card-header h3{margin:0;font-size:16px;}
-
   .view-box{position:relative;width:100%;max-width:500px;aspect-ratio:1.33/1;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#000;margin:0 auto 12px;}
-  .view-box video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);} /* Live mirror */
-
+  /* NOTE: this mirrors ONLY the on-screen preview so it feels natural.
+     The raw pixels captured to canvas are NOT mirrored. */
+  .view-box video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);}
   .card-guide{position:absolute;top:10%;left:8%;width:84%;height:80%;border:2px dashed #00e676;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,0.35);pointer-events:none;}
-
   .status-text{color:#009B8F;font-size:13px;font-weight:600;min-height:20px;margin-top:8px;}
   .btn-snap{width:100%;background:#009B8F;color:#fff;border:0;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;}
   .btn-snap:disabled{background:#94a3b8;color:#fff;}
 </style>
 </head>
 <body>
-
 <div class="wrap">
   <header>
     <div class="logo">🎟️</div>
@@ -78,7 +74,6 @@
       <div class="sub">Live sync with Notion Database</div>
     </div>
   </header>
-
   <div id="landing" class="card center">
     <div class="hero-ico">📷</div>
     <h2>Ready to scan</h2>
@@ -88,32 +83,28 @@
       <button id="startOcrBtn" class="btn btn-ocr">💳 Open Staff No. OCR</button>
     </div>
   </div>
-
+  <!-- INLINE CAMERA CONTAINER -->
   <div id="camCard" class="card hidden">
     <div class="cam-card-header">
       <h3 id="camTitle">Camera Scanner</h3>
       <button id="closeCamBtn" class="btn-close">✕ Close Camera</button>
     </div>
-
     <div class="view-box">
       <video id="webcam" playsinline webkit-playsinline muted autoplay></video>
       <div id="guideCard" class="card-guide hidden"></div>
     </div>
-
     <div style="text-align:center;">
       <button id="snapOcrBtn" class="btn-snap hidden" disabled>📸 Hold Steady & Snap</button>
       <div id="camStatus" class="status-text">Initializing camera…</div>
     </div>
   </div>
-
   <div id="qrResultCard" class="card hidden">
     <div id="result" class="result">Waiting for scan…</div>
   </div>
-
   <div id="ocrResultCard" class="card hidden">
     <h2>💳 Staff Number OCR Result</h2>
-    <p class="muted">Front Camera High-Contrast ROI Extraction.</p>
-      
+    <p class="muted">Front Camera · ROI crop + contrast-stretch + dual-orientation engine.</p>
+
     <div class="ocr-grid">
       <div class="ocr-item">
         <div class="lbl">Extracted Staff No.</div>
@@ -124,13 +115,11 @@
         <div class="val" id="ocrStatus" style="font-size:14px;color:var(--ink);">Ready</div>
       </div>
     </div>
-
     <div style="margin-top:10px;">
       <div class="muted" style="font-weight:600;margin-bottom:4px;">Raw OCR Text Output:</div>
       <div id="ocrRawText" class="result raw" style="background:#f1f5f9;padding:10px;border-radius:6px;min-height:36px;">Waiting for scan trigger…</div>
     </div>
   </div>
-
   <div class="card">
     <div class="counts">
       <div><b id="cPresent">0</b> Present</div>
@@ -147,56 +136,49 @@
     </table>
   </div>
 </div>
-
 <script>
 (function(){
   "use strict";
-  
-  var GAS_URL = "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL";
 
+  // PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
+  var GAS_URL = "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL";
   var DEPT_COLORS={"Operations":"#2783DE","Engineering":"#D5803B","Corporate":"#9B6BD6","Property":"#46A171","Human Resources":"#DF84A8","Finance":"#EAC26B","Information Technology":"#E56458"};
   var $=function(id){return document.getElementById(id);};
   var roster=[], byToken={}, pending={};
   var lastRaw="", lastAt=0;
-  
+
   var currentMode = null;
   var activeStream = null;
   var qrAnimationId = null;
   var ocrWorker = null;
   var isOcrProcessing = false;
 
-  function esc(s){return String(s==null?"":s).replace(/[&<>\"']/g,function(c){return {"&":"&","<":"<",">":">",'\"':"&quot;","'":"&#39;"}[c];});}
+  // Green-guide ROI (matches .card-guide: top10% left8% w84% h80%)
+  var ROI = { x:0.08, y:0.10, w:0.84, h:0.80 };
+
+  function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 
   async function apiCall(action, payload){
     payload = payload || {};
     payload.action = action;
     try {
-      var response = await fetch(GAS_URL, {
-        method: "POST",
-        body: JSON.stringify(payload)
-      });
+      var response = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(payload) });
       return await response.json();
     } catch(e) {
       return { success: false, error: e.toString() };
     }
   }
-
   async function loadRoster(){
     $("rosterBody").innerHTML='<tr><td colspan="5" class="muted">Loading roster from Notion…</td></tr>';
     var res = await apiCall("getRoster");
-    if(res && res.success){
-      onRoster(res.data);
-    } else {
-      $("rosterBody").innerHTML='<tr><td colspan="5" style="color:#c62828">Failed to load roster</td></tr>';
-    }
+    if(res && res.success){ onRoster(res.data); }
+    else { $("rosterBody").innerHTML='<tr><td colspan="5" style="color:#c62828">Failed to load roster</td></tr>'; }
   }
-
   function onRoster(rows){
     roster=rows||[]; byToken={};
     roster.forEach(function(r){ byToken[r.token]=r; });
     renderRoster(); updateCounts();
   }
-
   function renderRoster(){
     if(!roster.length){ $("rosterBody").innerHTML='<tr><td colspan="5" class="muted">No records found.</td></tr>'; return; }
     var h="";
@@ -211,7 +193,6 @@
     });
     $("rosterBody").innerHTML=h;
   }
-
   function updateCounts(){
     var present=roster.filter(function(r){return r.status==="Present";}).length;
     $("cPresent").textContent=present;
@@ -219,11 +200,11 @@
     $("cPending").textContent=roster.length-present;
   }
 
+  // ---------- Camera ----------
   async function openCamera(mode){
     currentMode = mode;
     $("camCard").classList.remove("hidden");
     $("camStatus").textContent = "Requesting front camera access…";
-
     if(mode === "qr"){
       $("camTitle").textContent = "📷 Scan Attendance QR";
       $("guideCard").classList.add("hidden");
@@ -237,14 +218,32 @@
       $("ocrResultCard").classList.remove("hidden");
       initOcrEngine();
     }
-
     try {
-      var constraints = { video: { facingMode: { ideal: "user" } }, audio: false };
+      // Request the highest practical resolution + continuous autofocus.
+      // Front camera is fixed-focus on most phones, but asking for 1080p
+      // gives Tesseract enough pixels on the digits (~30-40px tall).
+      var constraints = {
+        video: {
+          facingMode: { ideal: "user" },
+          width:  { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: false
+      };
       activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      // Best-effort continuous autofocus (ignored if unsupported)
+      try {
+        var track = activeStream.getVideoTracks()[0];
+        var caps = track.getCapabilities ? track.getCapabilities() : {};
+        if(caps && caps.focusMode && caps.focusMode.indexOf("continuous") !== -1){
+          await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+        }
+      } catch(_e){}
+
       var video = $("webcam");
       video.srcObject = activeStream;
       await video.play();
-
       if(mode === "qr"){
         $("camStatus").textContent = "Scanning for QR code…";
         tickQr();
@@ -256,7 +255,6 @@
       $("camStatus").textContent = "Camera Error: " + err.message;
     }
   }
-
   function closeCamera(){
     if(qrAnimationId) cancelAnimationFrame(qrAnimationId);
     if(activeStream){
@@ -268,6 +266,10 @@
     currentMode = null;
   }
 
+  // ---------- QR ----------
+  // IMPORTANT: raw getUserMedia frames are NOT mirrored (only the CSS preview is).
+  // So we draw the frame as-is; no scale(-1) flip, otherwise jsQR would see a
+  // mirrored code and fail.
   function tickQr(){
     var video = $("webcam");
     if(video.readyState === video.HAVE_ENOUGH_DATA){
@@ -275,10 +277,6 @@
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       var ctx = canvas.getContext("2d");
-      
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-      
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
       var code = jsQR(img.data, img.width, img.height);
@@ -291,14 +289,15 @@
     qrAnimationId = requestAnimationFrame(tickQr);
   }
 
+  // ---------- OCR ----------
   async function initOcrEngine(){
     if(ocrWorker) return;
     try {
       $("camStatus").textContent = "Loading OCR Engine…";
       ocrWorker = await Tesseract.createWorker("eng");
       await ocrWorker.setParameters({
-        tessedit_pageseg_mode: "6", // Assume uniform block of text
-        tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ "
+        tessedit_pageseg_mode: "6", // uniform block of text (we crop to the card)
+        tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ ."
       });
       if(currentMode === "ocr" && activeStream){
         $("snapOcrBtn").disabled = false;
@@ -307,6 +306,59 @@
     } catch(e) {
       $("camStatus").textContent = "OCR Load Error: " + e.message;
     }
+  }
+
+  // Grab a single still (raw, un-mirrored) from the live video.
+  function grabStill(video){
+    var c = document.createElement("canvas");
+    c.width = video.videoWidth;
+    c.height = video.videoHeight;
+    c.getContext("2d").drawImage(video, 0, 0);
+    return c;
+  }
+
+  // Build a processed ROI canvas from a still.
+  //  - crop to the green guide
+  //  - 2x upscale
+  //  - grayscale + gentle contrast-stretch (NOT hard binarization -> keeps
+  //    the loops of 6/8/0 intact)
+  //  - flip=true horizontally mirrors it (used for dual-orientation test)
+  function buildRoi(still, flip){
+    var vw = still.width, vh = still.height;
+    var cx = Math.floor(vw * ROI.x);
+    var cy = Math.floor(vh * ROI.y);
+    var cw = Math.floor(vw * ROI.w);
+    var ch = Math.floor(vh * ROI.h);
+    var scale = 2;
+
+    var c = document.createElement("canvas");
+    c.width = cw * scale;
+    c.height = ch * scale;
+    var ctx = c.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    if(flip){ ctx.translate(c.width, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(still, cx, cy, cw, ch, 0, 0, c.width, c.height);
+
+    // grayscale + min/max contrast stretch + mild curve
+    var img = ctx.getImageData(0, 0, c.width, c.height);
+    var d = img.data, i, lum;
+    var min = 255, max = 0;
+    for(i = 0; i < d.length; i += 4){
+      lum = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      if(lum < min) min = lum;
+      if(lum > max) max = lum;
+    }
+    var range = (max - min) || 1;
+    for(i = 0; i < d.length; i += 4){
+      lum = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+      var n = (lum - min) / range * 255;         // stretch
+      n = (n - 128) * 1.25 + 128;                 // gentle contrast boost
+      n = n < 0 ? 0 : (n > 255 ? 255 : n);
+      d[i] = d[i+1] = d[i+2] = n;
+    }
+    ctx.putImageData(img, 0, 0);
+    return c;
   }
 
   function cleanStaffNo(rawVal){
@@ -319,73 +371,49 @@
     return val.split("").map(function(c){ return map[c] || c; }).join("");
   }
 
-  // Pre-process canvas: Grayscale & Contrast Enhancement
-  function preprocessCanvas(ctx, width, height) {
-    var imgData = ctx.getImageData(0, 0, width, height);
-    var d = imgData.data;
-    for (var i = 0; i < d.length; i += 4) {
-      // Grayscale luminance
-      var v = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
-      // High-contrast binarization
-      v = v > 120 ? 255 : 0;
-      d[i] = d[i + 1] = d[i + 2] = v;
-    }
-    ctx.putImageData(imgData, 0, 0);
+  // Score an OCR result: prefer a valid staff-number pattern, then confidence.
+  function scoreResult(res, orientLabel){
+    var text = (res && res.data && res.data.text) ? res.data.text.trim() : "";
+    var conf = (res && res.data && typeof res.data.confidence === "number") ? res.data.confidence : 0;
+    // Prefer anchored "Staff No. xxxxxx", fall back to any 5-6 digit token.
+    var m = text.match(/(?:STAFF\s*NO\.?\s*)([0-9OISBBLZG]{5,6}[A-Z]{0,2})/i);
+    if(!m) m = text.match(/\b([0-9OISBBLZG]{5,6}[A-Z]{0,2})\b/i);
+    var staff = m ? cleanStaffNo(m[1]) : null;
+    return { text: text, conf: conf, staff: staff, valid: !!staff, orient: orientLabel };
+  }
+
+  // Run OCR on both orientations of the same still and keep the best.
+  // This removes any guesswork about whether the raw frame is mirrored.
+  async function recognizeBest(still){
+    var a = scoreResult(await ocrWorker.recognize(buildRoi(still, false)), "normal");
+    var b = scoreResult(await ocrWorker.recognize(buildRoi(still, true)),  "mirrored");
+    if(a.valid && !b.valid) return a;
+    if(b.valid && !a.valid) return b;
+    return (b.conf > a.conf) ? b : a;   // both valid or both invalid -> higher confidence
   }
 
   async function captureAndAnalyze(){
-    if(isOcrProcessing) return; 
+    if(isOcrProcessing) return;
     isOcrProcessing = true;
     var btn = $("snapOcrBtn");
-    btn.disabled = true; 
+    btn.disabled = true;
     btn.textContent = "Processing OCR…";
-    
+
     var v = $("webcam");
-    if(v && v.readyState === v.HAVE_ENOUGH_DATA){ 
-      var vw = v.videoWidth;
-      var vh = v.videoHeight;
-
-      // Un-flip full frame
-      var tempCanvas = document.createElement("canvas");
-      tempCanvas.width = vw;
-      tempCanvas.height = vh;
-      var tempCtx = tempCanvas.getContext("2d");
-      tempCtx.translate(vw, 0);
-      tempCtx.scale(-1, 1);
-      tempCtx.drawImage(v, 0, 0, vw, vh);
-
-      // Extract ROI inside green box (top:10%, left:8%, width:84%, height:80%)
-      var cropX = Math.floor(vw * 0.08);
-      var cropY = Math.floor(vh * 0.10);
-      var cropW = Math.floor(vw * 0.84);
-      var cropH = Math.floor(vh * 0.80);
-
-      var roiCanvas = document.createElement("canvas");
-      roiCanvas.width = cropW;
-      roiCanvas.height = cropH;
-      var roiCtx = roiCanvas.getContext("2d");
-      
-      roiCtx.drawImage(tempCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-      
-      // Apply contrast thresholding to reduce front-camera sensor noise
-      preprocessCanvas(roiCtx, cropW, cropH);
-
+    if(v && v.readyState === v.HAVE_ENOUGH_DATA){
       if(!ocrWorker) await initOcrEngine();
       try {
-        var res = await ocrWorker.recognize(roiCanvas);
-        var rawText = (res.data && res.data.text) ? res.data.text.trim() : "";
+        var still = grabStill(v);
+        var best = await recognizeBest(still);
+        var dbg = "\n\n[orientation: " + best.orient + " · confidence: " + Math.round(best.conf) + "]";
+        $("ocrRawText").textContent = (best.text || "(No text recognized in camera frame)") + dbg;
 
-        $("ocrRawText").textContent = rawText || "(No text recognized in cropped guide box)";
-
-        var match = rawText.match(/([0-9OISBBLZG]{5,6}[A-Z]{0,2})/i);
-        var extracted = match ? cleanStaffNo(match[1]) : null;
-
-        if (extracted) {
-          $("ocrStaffNo").textContent = extracted;
+        if (best.staff) {
+          $("ocrStaffNo").textContent = best.staff;
           $("ocrStatus").textContent = "✓ Extracted Successfully";
           $("ocrStatus").style.color = "#2e7d32";
-        } else if (rawText.length > 0) {
-          $("ocrStaffNo").textContent = rawText;
+        } else if (best.text.length > 0) {
+          $("ocrStaffNo").textContent = best.text.split("\n")[0] || "—";
           $("ocrStatus").textContent = "Text Found (No Staff No. Format)";
           $("ocrStatus").style.color = "#b26a00";
         } else {
@@ -393,18 +421,18 @@
           $("ocrStatus").textContent = "No Text Found";
           $("ocrStatus").style.color = "#c62828";
         }
-
         closeCamera();
       } catch(err) {
         alert("OCR Analysis Error: " + err.message);
       }
     }
-    
-    isOcrProcessing = false; 
-    btn.disabled = false; 
+
+    isOcrProcessing = false;
+    btn.disabled = false;
     btn.textContent = "📸 Hold Steady & Snap";
   }
 
+  // ---------- Notion write ----------
   async function handleCode(raw){
     if(!raw) return;
     var now=Date.now();
@@ -418,7 +446,7 @@
     if(pending[row.pageId]) return;
     pending[row.pageId]=true;
     showResult("warn",row.name,"Marking Present in Notion…",raw);
-    
+
     var res = await apiCall("markPresent", { pageId: row.pageId });
     delete pending[row.pageId];
     if(res && res.success){
@@ -429,13 +457,11 @@
       showResult("err",row.name+" — update failed",res ? res.error : "Network Error",raw);
     }
   }
-
   function showResult(kind,who,detail,raw){
     var el=$("result");
     el.className="result "+(kind||"");
     el.innerHTML='<div class="who">'+esc(who)+'</div><div>'+esc(detail||"")+'</div>'+(raw?'<div class="raw">'+esc(raw)+'</div>':"");
   }
-
   function exportCSV(){
     var rows=[["ID","Name","Department","Title","Status"]];
     roster.forEach(function(r){ rows.push([r.uid||"",r.name,r.dept||"",r.jobTitle||"",r.status||"Not Marked"]); });
@@ -445,14 +471,12 @@
     var a=document.createElement("a");a.href=url;a.download="attendance.csv";document.body.appendChild(a);a.click();a.remove();
     setTimeout(function(){URL.revokeObjectURL(url);},1500);
   }
-
   $("startQrBtn").addEventListener("click", function(){ openCamera("qr"); });
   $("startOcrBtn").addEventListener("click", function(){ openCamera("ocr"); });
   $("closeCamBtn").addEventListener("click", closeCamera);
   $("snapOcrBtn").addEventListener("click", captureAndAnalyze);
   $("refreshBtn").addEventListener("click", loadRoster);
   $("exportBtn").addEventListener("click", exportCSV);
-
   loadRoster();
 })();
 </script>
