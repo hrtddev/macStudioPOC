@@ -5,28 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Course Attendance Scanner</title>
 
-<!-- QR engine (unchanged) -->
+<!-- QR Engine -->
 <script src="https://cdn.jsdelivr.net/npm/jsQR@1.4.0/dist/jsQR.min.js"></script>
 
-<!-- ============================================================
-     PADDLE OCR ENGINE WIRING (replaces Tesseract.js)
-     PaddleOCR.js is pure ESM and depends on OpenCV.js, which no
-     generic CDN can serve as browser-ESM. So we:
-       1) load OpenCV's UMD build via a plain <script> (sets globalThis.cv)
-       2) shim "@techstark/opencv-js" -> globalThis.cv via an import map
-       3) load the SDK from esm.sh with ?external=@techstark/opencv-js
-     Models (~10 MB, PP-OCRv5 mobile) download ONCE then cache offline.
-     NOTE: must be served over HTTPS (GitHub Pages OK; not file://).
-     ============================================================ -->
-<script async src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js/dist/opencv.js"></script>
-<script type="importmap">
-{
-  "imports": {
-    "@techstark/opencv-js": "data:text/javascript,export default globalThis.cv;",
-    "@paddleocr/paddleocr-js": "https://esm.sh/@paddleocr/paddleocr-js@0.4.2?external=@techstark/opencv-js"
-  }
-}
-</script>
+<!-- Tesseract.js OCR Engine -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 <style>
   :root{--blue:#2783DE;--ink:#1f2328;--muted:#6b7280;--line:#e6e8eb;--bg:#f7f8fa;}
@@ -74,13 +57,14 @@
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
   .muted{color:var(--muted);font-size:12px;}
   .hidden{display:none !important;}
-  /* INLINE CAMERA VIEWER — preview mirroring handled dynamically in JS */
+
+  /* INLINE CAMERA VIEWER */
   .cam-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
   .cam-card-header h3{margin:0;font-size:16px;}
   .cam-actions{display:flex;gap:8px;align-items:center;}
   .view-box{position:relative;width:100%;max-width:500px;aspect-ratio:1.33/1;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:#000;margin:0 auto 12px;}
   .view-box video{width:100%;height:100%;object-fit:cover;}
-  .view-box video.mirror{transform:scaleX(-1);} /* mirror ONLY the front-camera preview */
+  .view-box video.mirror{transform:scaleX(-1);}
   .card-guide{position:absolute;top:10%;left:8%;width:84%;height:80%;border:2px dashed #00e676;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,0.35);pointer-events:none;}
   .status-text{color:#009B8F;font-size:13px;font-weight:600;min-height:20px;margin-top:8px;}
   .btn-snap{width:100%;background:#009B8F;color:#fff;border:0;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;}
@@ -105,6 +89,7 @@
       <button id="startOcrBtn" class="btn btn-ocr">💳 Open Staff No. OCR</button>
     </div>
   </div>
+  
   <!-- INLINE CAMERA CONTAINER -->
   <div id="camCard" class="card hidden">
     <div class="cam-card-header">
@@ -123,12 +108,14 @@
       <div id="camStatus" class="status-text">Initializing camera…</div>
     </div>
   </div>
+
   <div id="qrResultCard" class="card hidden">
     <div id="result" class="result">Waiting for scan…</div>
   </div>
+
   <div id="ocrResultCard" class="card hidden">
     <h2>💳 Staff Number OCR Result</h2>
-    <p class="muted">PaddleOCR (PP-OCRv5) neural engine · runs fully in-browser.</p>
+    <p class="muted">Tesseract.js engine · runs fully in-browser.</p>
 
     <div class="ocr-grid">
       <div class="ocr-item">
@@ -145,6 +132,7 @@
       <div id="ocrRawText" class="result raw" style="background:#f1f5f9;padding:10px;border-radius:6px;min-height:36px;">Waiting for scan trigger…</div>
     </div>
   </div>
+
   <div class="card">
     <div class="counts">
       <div><b id="cPresent">0</b> Present</div>
@@ -161,11 +149,11 @@
     </table>
   </div>
 </div>
+
 <script>
 (function(){
   "use strict";
 
-  // PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
   var GAS_URL = "YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL";
   var DEPT_COLORS={"Operations":"#2783DE","Engineering":"#D5803B","Corporate":"#9B6BD6","Property":"#46A171","Human Resources":"#DF84A8","Finance":"#EAC26B","Information Technology":"#E56458"};
   var $=function(id){return document.getElementById(id);};
@@ -176,11 +164,10 @@
   var activeStream = null;
   var qrAnimationId = null;
   var isOcrProcessing = false;
-  var facing = "user";                 // "user" = front, "environment" = rear
-  var ocrEngine = null;                // PaddleOCR instance
+  var facing = "user";
+  var ocrWorker = null;
   var ocrLoading = false;
 
-  // Green-guide ROI (matches .card-guide: top10% left8% w84% h80%)
   var ROI = { x:0.08, y:0.10, w:0.84, h:0.80 };
 
   function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
@@ -193,17 +180,20 @@
       return await response.json();
     } catch(e) { return { success: false, error: e.toString() }; }
   }
+
   async function loadRoster(){
     $("rosterBody").innerHTML='<tr><td colspan="5" class="muted">Loading roster from Notion…</td></tr>';
     var res = await apiCall("getRoster");
     if(res && res.success){ onRoster(res.data); }
     else { $("rosterBody").innerHTML='<tr><td colspan="5" style="color:#c62828">Failed to load roster</td></tr>'; }
   }
+
   function onRoster(rows){
     roster=rows||[]; byToken={};
     roster.forEach(function(r){ byToken[r.token]=r; });
     renderRoster(); updateCounts();
   }
+
   function renderRoster(){
     if(!roster.length){ $("rosterBody").innerHTML='<tr><td colspan="5" class="muted">No records found.</td></tr>'; return; }
     var h="";
@@ -218,6 +208,7 @@
     });
     $("rosterBody").innerHTML=h;
   }
+
   function updateCounts(){
     var present=roster.filter(function(r){return r.status==="Present";}).length;
     $("cPresent").textContent=present;
@@ -225,33 +216,13 @@
     $("cPending").textContent=roster.length-present;
   }
 
-  // ---------------- OpenCV + PaddleOCR bootstrap ----------------
-  function waitForCv(){
-    return new Promise(function(resolve, reject){
-      var t0 = Date.now();
-      (function check(){
-        var cv = globalThis.cv;
-        if (cv && typeof cv.then === "function"){ cv.then(function(m){ globalThis.cv = m; }); }
-        else if (cv && cv.Mat){ return resolve(); }
-        if (Date.now() - t0 > 90000) return reject(new Error("OpenCV.js load timeout"));
-        setTimeout(check, 120);
-      })();
-    });
-  }
-
+  // ---------------- Tesseract OCR Engine Bootstrap ----------------
   async function initOcrEngine(){
-    if (ocrEngine || ocrLoading) return;
+    if (ocrWorker || ocrLoading) return;
     ocrLoading = true;
     try {
-      $("camStatus").textContent = "Loading OCR engine (first run downloads ~10 MB, then cached)…";
-      await waitForCv();
-      var mod = await import("@paddleocr/paddleocr-js");
-      var PaddleOCR = mod.PaddleOCR || (mod.default && mod.default.PaddleOCR);
-      ocrEngine = await PaddleOCR.create({
-        textDetectionModelName: "PP-OCRv5_mobile_det",
-        textRecognitionModelName: "PP-OCRv5_mobile_rec",
-        ortOptions: { backend: "auto" }
-      });
+      $("camStatus").textContent = "Loading OCR engine…";
+      ocrWorker = await Tesseract.createWorker('eng');
       if(currentMode === "ocr" && activeStream){
         $("snapOcrBtn").disabled = false;
         $("camStatus").textContent = "Align card in green box & tap snap.";
@@ -263,13 +234,13 @@
     }
   }
 
-  // ---------------- Camera ----------------
+  // ---------------- Camera Controls ----------------
   async function openCamera(mode){
     currentMode = mode;
     $("camCard").classList.remove("hidden");
     $("camStatus").textContent = "Requesting camera access…";
     var isFront = (facing === "user");
-    $("webcam").classList.toggle("mirror", isFront); // mirror preview only for front cam
+    $("webcam").classList.toggle("mirror", isFront);
 
     if(mode === "qr"){
       $("camTitle").textContent = "📷 Scan Attendance QR";
@@ -291,7 +262,6 @@
       };
       activeStream = await navigator.mediaDevices.getUserMedia(constraints);
 
-      // best-effort continuous autofocus (ignored if unsupported)
       try {
         var track = activeStream.getVideoTracks()[0];
         var caps = track.getCapabilities ? track.getCapabilities() : {};
@@ -307,32 +277,35 @@
         $("camStatus").textContent = "Scanning for QR code…";
         tickQr();
       } else {
-        if(ocrEngine) $("snapOcrBtn").disabled = false;
-        $("camStatus").textContent = ocrEngine ? "Align card in green box & tap snap." : "Loading OCR engine…";
+        if(ocrWorker) $("snapOcrBtn").disabled = false;
+        $("camStatus").textContent = ocrWorker ? "Align card in green box & tap snap." : "Loading OCR engine…";
       }
     } catch(err) {
       $("camStatus").textContent = "Camera Error: " + err.message;
     }
   }
+
   function stopStream(){
     if(qrAnimationId) cancelAnimationFrame(qrAnimationId);
     if(activeStream){ activeStream.getTracks().forEach(function(t){ t.stop(); }); activeStream = null; }
     $("webcam").srcObject = null;
   }
+
   function closeCamera(){
     stopStream();
     $("camCard").classList.add("hidden");
     currentMode = null;
   }
+
   async function flipCamera(){
     if(!currentMode) return;
     facing = (facing === "user") ? "environment" : "user";
     var mode = currentMode;
     stopStream();
-    await openCamera(mode);   // reopen same mode with the other lens
+    await openCamera(mode);
   }
 
-  // ---------------- QR (jsQR, raw un-mirrored frame) ----------------
+  // ---------------- QR (jsQR) ----------------
   function tickQr(){
     var video = $("webcam");
     if(video.readyState === video.HAVE_ENOUGH_DATA){
@@ -348,7 +321,7 @@
     qrAnimationId = requestAnimationFrame(tickQr);
   }
 
-  // ---------------- OCR helpers ----------------
+  // ---------------- OCR Helpers ----------------
   function grabStill(video){
     var c = document.createElement("canvas");
     c.width = video.videoWidth;
@@ -356,8 +329,7 @@
     c.getContext("2d").drawImage(video, 0, 0);
     return c;
   }
-  // Crop to green guide + upscale. No hard binarization — PaddleOCR does its
-  // own preprocessing and prefers natural pixels. flip=true un-mirrors.
+
   function buildRoi(still, flip){
     var vw=still.width, vh=still.height;
     var cx=Math.floor(vw*ROI.x), cy=Math.floor(vh*ROI.y);
@@ -371,19 +343,14 @@
     ctx.drawImage(still, cx,cy,cw,ch, 0,0,c.width,c.height);
     return c;
   }
-  function canvasToBlob(canvas){
-    return new Promise(function(res){ canvas.toBlob(res, "image/png"); });
+
+  async function runOcr(canvas){
+    var res = await ocrWorker.recognize(canvas);
+    var text = (res && res.data && res.data.text) ? res.data.text.trim() : "";
+    var conf = (res && res.data && res.data.confidence) ? Math.round(res.data.confidence) : 0;
+    return { text: text, conf: conf };
   }
-  async function runPaddle(canvas){
-    var blob = await canvasToBlob(canvas);
-    var results = await ocrEngine.predict(blob);
-    var r = results && results[0];
-    var items = (r && r.items) || [];
-    var text = items.map(function(it){ return it.text || it.rec_text || it.transcription || ""; }).join("\n").trim();
-    var scores = items.map(function(it){ return (typeof it.score==="number")?it.score:(typeof it.rec_score==="number"?it.rec_score:0); });
-    var avg = scores.length ? scores.reduce(function(a,b){return a+b;},0)/scores.length : 0;
-    return { text: text, conf: Math.round(avg*100) };
-  }
+
   function cleanStaffNo(rawVal){
     if(!rawVal) return null;
     var s = rawVal.trim().toUpperCase();
@@ -391,12 +358,12 @@
     if(!m) return null;
     var val = m[1];
     var map = {"O":"0","I":"1","L":"1","|":"1","S":"5","B":"8","Z":"2","G":"6"};
-    // fix digits, keep an optional 1-2 letter suffix intact
     var mm = val.match(/^([0-9OISBBLZG]{5,6})([A-Z]{0,2})$/);
     if(!mm) return val;
     var digits = mm[1].split("").map(function(c){ return map[c] || c; }).join("");
     return digits + mm[2];
   }
+
   function parseStaff(text){
     if(!text) return null;
     var m = text.match(/(?:STAFF\s*NO\.?\s*)([0-9OISBBLZG]{5,6}[A-Z]{0,2})/i);
@@ -412,19 +379,16 @@
     var v = $("webcam");
 
     if(v && v.readyState === v.HAVE_ENOUGH_DATA){
-      if(!ocrEngine){ await initOcrEngine(); }
+      if(!ocrWorker){ await initOcrEngine(); }
       try {
         var still = grabStill(v);
 
-        // Primary pass: normal orientation (raw frames are NOT mirrored).
-        var out = await runPaddle(buildRoi(still, false));
+        var out = await runOcr(buildRoi(still, false));
         var staff = parseStaff(out.text);
         var orient = "normal";
 
-        // Fallback: if no staff pattern, try a mirrored ROI (covers any
-        // device that hands back a pre-mirrored front-camera frame).
         if(!staff){
-          var out2 = await runPaddle(buildRoi(still, true));
+          var out2 = await runOcr(buildRoi(still, true));
           var staff2 = parseStaff(out2.text);
           if(staff2){ out = out2; staff = staff2; orient = "mirrored"; }
         }
@@ -455,7 +419,7 @@
     btn.disabled = false; btn.textContent = "📸 Hold Steady & Snap";
   }
 
-  // ---------------- Notion write ----------------
+  // ---------------- Notion Sync ----------------
   async function handleCode(raw){
     if(!raw) return;
     var now=Date.now();
@@ -479,11 +443,13 @@
       showResult("err",row.name+" — update failed",res ? res.error : "Network Error",raw);
     }
   }
+
   function showResult(kind,who,detail,raw){
     var el=$("result");
     el.className="result "+(kind||"");
     el.innerHTML='<div class="who">'+esc(who)+'</div><div>'+esc(detail||"")+'</div>'+(raw?'<div class="raw">'+esc(raw)+'</div>':"");
   }
+
   function exportCSV(){
     var rows=[["ID","Name","Department","Title","Status"]];
     roster.forEach(function(r){ rows.push([r.uid||"",r.name,r.dept||"",r.jobTitle||"",r.status||"Not Marked"]); });
@@ -502,7 +468,6 @@
   $("refreshBtn").addEventListener("click", loadRoster);
   $("exportBtn").addEventListener("click", exportCSV);
 
-  // Warm up the OCR engine early so the first scan is fast.
   initOcrEngine();
   loadRoster();
 })();
