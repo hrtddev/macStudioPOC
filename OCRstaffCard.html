@@ -18,20 +18,12 @@
      Models (~10 MB, PP-OCRv5 mobile) download ONCE then cache offline.
      NOTE: must be served over HTTPS (GitHub Pages OK; not file://).
      ============================================================ -->
-<!-- IMPORTANT: onnxruntime-web JS and its .wasm binaries MUST be the SAME
-     version, otherwise ORT throws "no available backend found / initWasm
-     failed". We pin ONE version below for both:
-       - the JS: import map pins onnxruntime-web to esm.sh @ ORT_VER
-       - the WASM: ortOptions.wasmPaths (in JS) points to jsDelivr @ ORT_VER
-     If you ever see a WASM "magic word"/LinkError after a version bump,
-     make BOTH the number here and ORT_VER in the script agree. -->
 <script async src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js/dist/opencv.js"></script>
 <script type="importmap">
 {
   "imports": {
     "@techstark/opencv-js": "data:text/javascript,export default globalThis.cv;",
-    "onnxruntime-web": "https://esm.sh/onnxruntime-web@1.22.0?bundle",
-    "@paddleocr/paddleocr-js": "https://esm.sh/@paddleocr/paddleocr-js@0.4.2?external=@techstark/opencv-js,onnxruntime-web"
+    "@paddleocr/paddleocr-js": "https://esm.sh/@paddleocr/paddleocr-js@0.4.2?external=@techstark/opencv-js"
   }
 }
 </script>
@@ -93,22 +85,6 @@
   .status-text{color:#009B8F;font-size:13px;font-weight:600;min-height:20px;margin-top:8px;}
   .btn-snap{width:100%;background:#009B8F;color:#fff;border:0;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;}
   .btn-snap:disabled{background:#94a3b8;color:#fff;}
-
-  /* ---- Auto-scan UX ---- */
-  .status-row{display:flex;align-items:center;justify-content:center;gap:8px;min-height:22px;margin-top:8px;}
-  .spinner{width:16px;height:16px;border:2px solid #cfe9e6;border-top-color:#009B8F;border-radius:50%;animation:spin .8s linear infinite;display:none;}
-  .spinner.on{display:inline-block;}
-  @keyframes spin{to{transform:rotate(360deg);}}
-  .status-text.s-hold{color:#b26a00;}
-  .status-text.s-read{color:#009B8F;}
-  .status-text.s-done{color:#2e7d32;}
-  .status-text.s-wait{color:#6b7280;}
-  .status-text.s-err{color:#c62828;}
-  /* pulsing guide while actively reading */
-  .card-guide.reading{border-color:#009B8F;animation:pulse 1s ease-in-out infinite;}
-  @keyframes pulse{0%,100%{box-shadow:0 0 0 9999px rgba(0,0,0,0.35);}50%{box-shadow:0 0 0 9999px rgba(0,0,0,0.45);}}
-  .card-guide.locked{border-color:#2e7d32;border-style:solid;}
-  .scan-debug{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:#94a3b8;text-align:center;margin-top:4px;min-height:14px;}
 </style>
 </head>
 <body>
@@ -143,14 +119,8 @@
       <div id="guideCard" class="card-guide hidden"></div>
     </div>
     <div style="text-align:center;">
-      <!-- Auto-scan: no button needed. This status row is driven by the state machine. -->
-      <div class="status-row">
-        <span id="camSpinner" class="spinner"></span>
-        <div id="camStatus" class="status-text">Initializing camera…</div>
-      </div>
-      <div id="scanDebug" class="scan-debug"></div>
-      <!-- Manual snap kept as a hidden fallback (enable with ?manual=1). -->
-      <button id="snapOcrBtn" class="btn-snap hidden" disabled>📸 Snap now</button>
+      <button id="snapOcrBtn" class="btn-snap hidden" disabled>📸 Hold Steady & Snap</button>
+      <div id="camStatus" class="status-text">Initializing camera…</div>
     </div>
   </div>
   <div id="qrResultCard" class="card hidden">
@@ -210,38 +180,8 @@
   var ocrEngine = null;                // PaddleOCR instance
   var ocrLoading = false;
 
-  // ORT version — MUST match the onnxruntime-web pin in the import map above.
-  // wasmPaths tells ONNX Runtime where to fetch its .wasm binaries so it does
-  // not (incorrectly) look relative to the GitHub Pages origin.
-  var ORT_VER = "1.22.0";
-  var ORT_WASM_PATHS = "https://cdn.jsdelivr.net/npm/onnxruntime-web@" + ORT_VER + "/dist/";
-
   // Green-guide ROI (matches .card-guide: top10% left8% w84% h80%)
   var ROI = { x:0.08, y:0.10, w:0.84, h:0.80 };
-
-  // ---------------- AUTO-SCAN tuning ----------------
-  // All thresholds operate on a tiny 32x24 grayscale of the ROI (0-255).
-  // Add ?debug=1 to the URL to see live motion/std values and tune these.
-  var AUTO = {
-    SAMPLE_MS: 120,        // how often we sample the frame for motion
-    THUMB_W: 32, THUMB_H: 24,
-    STILL_DIFF: 7,         // mean abs pixel diff <= this  => "still"
-    STABLE_MS: 500,        // must stay still this long before OCR fires
-    UNLOCK_DIFF: 16,       // diff vs the LOCKED frame > this => card changed/removed
-    CONTENT_STD: 16,       // ROI std-dev >= this => "a card is present" (blocks OCR on empty box)
-    FAIL_COOLDOWN_MS: 1200 // after a failed read, brief pause before retrying
-  };
-  var DEBUG  = /[?&]debug=1/.test(location.search);
-  var MANUAL = /[?&]manual=1/.test(location.search);
-
-  // Auto-scan state machine: idle -> holding -> reading -> locked -> (change) -> idle
-  var scanState = "idle";
-  var detTimer  = null;
-  var prevThumb = null;    // last sampled grayscale (Uint8Array)
-  var lockedThumb = null;  // grayscale captured at the moment we locked an ID
-  var stillSince = 0;
-  var lastFailAt = 0;
-  var thumbCanvas = null;  // reused offscreen canvas for sampling
 
   function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 
@@ -308,17 +248,13 @@
       var mod = await import("@paddleocr/paddleocr-js");
       var PaddleOCR = mod.PaddleOCR || (mod.default && mod.default.PaddleOCR);
       ocrEngine = await PaddleOCR.create({
-        worker: false,                 // main-thread mode: avoids cross-origin worker asset issues
         textDetectionModelName: "PP-OCRv5_mobile_det",
         textRecognitionModelName: "PP-OCRv5_mobile_rec",
-        ortOptions: {
-          backend: "wasm",             // force CPU/WASM (GitHub Pages has no COOP/COEP for threads/WebGPU)
-          wasmPaths: ORT_WASM_PATHS    // <-- the actual fix for "initWasm() failed"
-        }
+        ortOptions: { backend: "auto" }
       });
       if(currentMode === "ocr" && activeStream){
         $("snapOcrBtn").disabled = false;
-        setScan("wait", "Show a staff card in the box…");
+        $("camStatus").textContent = "Align card in green box & tap snap.";
       }
     } catch(e){
       $("camStatus").textContent = "OCR engine failed to load: " + (e && e.message ? e.message : e);
@@ -343,11 +279,9 @@
     } else {
       $("camTitle").textContent = "💳 Scan Staff Card OCR";
       $("guideCard").classList.remove("hidden");
-      // Auto-scan: snap button stays hidden unless ?manual=1
-      $("snapOcrBtn").classList.toggle("hidden", !MANUAL);
+      $("snapOcrBtn").classList.remove("hidden");
       $("snapOcrBtn").disabled = true;
       $("ocrResultCard").classList.remove("hidden");
-      resetScan();
       initOcrEngine();
     }
     try {
@@ -374,8 +308,7 @@
         tickQr();
       } else {
         if(ocrEngine) $("snapOcrBtn").disabled = false;
-        setScan("wait", ocrEngine ? "Show a staff card in the box…" : "Loading OCR engine…");
-        startDetectLoop();   // hands-free auto scanning
+        $("camStatus").textContent = ocrEngine ? "Align card in green box & tap snap." : "Loading OCR engine…";
       }
     } catch(err) {
       $("camStatus").textContent = "Camera Error: " + err.message;
@@ -383,7 +316,6 @@
   }
   function stopStream(){
     if(qrAnimationId) cancelAnimationFrame(qrAnimationId);
-    stopDetectLoop();
     if(activeStream){ activeStream.getTracks().forEach(function(t){ t.stop(); }); activeStream = null; }
     $("webcam").srcObject = null;
   }
@@ -472,178 +404,55 @@
     return m ? cleanStaffNo(m[1]) : null;
   }
 
-  // One full OCR pass on the CURRENT frame (dual-orientation). Returns a
-  // result object; does NOT touch the DOM or close the camera.
-  async function runOcrCombined(){
-    var v = $("webcam");
-    if(!(v && v.readyState === v.HAVE_ENOUGH_DATA)) return { text:"", conf:0, staff:null, orient:"none" };
-    if(!ocrEngine){ await initOcrEngine(); }
-    var still = grabStill(v);
-    var out = await runPaddle(buildRoi(still, false));
-    var staff = parseStaff(out.text);
-    var orient = "normal";
-    if(!staff){
-      var out2 = await runPaddle(buildRoi(still, true));
-      var staff2 = parseStaff(out2.text);
-      if(staff2){ out = out2; staff = staff2; orient = "mirrored"; }
-    }
-    out.staff = staff; out.orient = orient;
-    return out;
-  }
-
-  // Render an OCR result into the result card (and look up the name for feedback).
-  function showOcrResult(out){
-    var dbg = "\n\n[orientation: " + out.orient + " · confidence: " + out.conf + "%]";
-    $("ocrRawText").textContent = (out.text || "(No text recognized)") + dbg;
-    if (out.staff) {
-      $("ocrStaffNo").textContent = out.staff;
-      // Nice feedback: match against roster by uid (does NOT mark attendance).
-      var match = roster.filter(function(r){ return String(r.uid||"").toUpperCase() === out.staff; })[0];
-      if(match){
-        $("ocrStatus").textContent = "✓ " + match.name;
-        $("ocrStatus").style.color = "#2e7d32";
-      } else {
-        $("ocrStatus").textContent = "✓ Extracted (not in roster)";
-        $("ocrStatus").style.color = "#b26a00";
-      }
-    } else if (out.text.length > 0) {
-      $("ocrStaffNo").textContent = out.text.split("\n")[0] || "—";
-      $("ocrStatus").textContent = "Text Found (No Staff No. Format)";
-      $("ocrStatus").style.color = "#b26a00";
-    } else {
-      $("ocrStaffNo").textContent = "—";
-      $("ocrStatus").textContent = "No Text Found";
-      $("ocrStatus").style.color = "#c62828";
-    }
-  }
-
-  // ---------------- Auto-scan state machine ----------------
-  function setScan(kind, msg){
-    var el = $("camStatus");
-    el.className = "status-text s-" + (kind==="hold"?"hold":kind==="read"?"read":kind==="done"?"done":kind==="err"?"err":"wait");
-    el.textContent = msg;
-    $("camSpinner").classList.toggle("on", kind === "read");
-    $("guideCard").classList.toggle("reading", kind === "read");
-    $("guideCard").classList.toggle("locked", kind === "done");
-  }
-  function resetScan(){
-    scanState = "idle"; prevThumb = null; lockedThumb = null; stillSince = 0; lastFailAt = 0;
-    $("scanDebug").textContent = "";
-  }
-  function startDetectLoop(){
-    stopDetectLoop();
-    if(!thumbCanvas){ thumbCanvas = document.createElement("canvas"); thumbCanvas.width = AUTO.THUMB_W; thumbCanvas.height = AUTO.THUMB_H; }
-    detTimer = setInterval(detectTick, AUTO.SAMPLE_MS);
-  }
-  function stopDetectLoop(){ if(detTimer){ clearInterval(detTimer); detTimer = null; } }
-
-  // Downscale the ROI to a tiny grayscale + compute std-dev (content measure).
-  function sampleThumb(video){
-    var vw = video.videoWidth, vh = video.videoHeight;
-    if(!vw || !vh) return null;
-    var cx = vw*ROI.x, cy = vh*ROI.y, cw = vw*ROI.w, ch = vh*ROI.h;
-    var ctx = thumbCanvas.getContext("2d");
-    ctx.drawImage(video, cx, cy, cw, ch, 0, 0, AUTO.THUMB_W, AUTO.THUMB_H);
-    var d = ctx.getImageData(0, 0, AUTO.THUMB_W, AUTO.THUMB_H).data;
-    var n = AUTO.THUMB_W*AUTO.THUMB_H;
-    var g = new Uint8Array(n), sum = 0, i, p;
-    for(i=0, p=0; i<d.length; i+=4, p++){ var lum=(d[i]*0.299 + d[i+1]*0.587 + d[i+2]*0.114)|0; g[p]=lum; sum+=lum; }
-    var mean = sum/n, vs = 0;
-    for(p=0; p<n; p++){ var dd = g[p]-mean; vs += dd*dd; }
-    return { data:g, std:Math.sqrt(vs/n) };
-  }
-  function diffThumb(a, b){
-    if(!a || !b) return 999;
-    var s = 0, n = a.length;
-    for(var i=0; i<n; i++){ s += Math.abs(a[i]-b[i]); }
-    return s/n;
-  }
-
-  function detectTick(){
-    var v = $("webcam");
-    if(!v || v.readyState !== v.HAVE_ENOUGH_DATA) return;
-    var t = sampleThumb(v);
-    if(!t) return;
-    var motion = diffThumb(t.data, prevThumb);
-    prevThumb = t.data;
-
-    if(DEBUG){ $("scanDebug").textContent = "motion=" + motion.toFixed(1) + "  std=" + t.std.toFixed(1) + "  state=" + scanState; }
-
-    if(scanState === "reading") return;  // an OCR pass is running; ignore frames
-
-    // LOCKED: keep showing the last ID until the card visibly changes.
-    if(scanState === "locked"){
-      var dl = diffThumb(t.data, lockedThumb);
-      if(dl > AUTO.UNLOCK_DIFF){          // card removed or a different card appeared
-        scanState = "idle"; stillSince = 0;
-        setScan("wait", "Show a staff card in the box…");
-      }
-      return;
-    }
-
-    // Not locked: first require a card to actually be present (content guard).
-    if(t.std < AUTO.CONTENT_STD){
-      scanState = "idle"; stillSince = 0;
-      setScan("wait", "Show a staff card in the box…");
-      return;
-    }
-
-    // Card present — check stillness.
-    if(motion <= AUTO.STILL_DIFF){
-      if(Date.now() - lastFailAt < AUTO.FAIL_COOLDOWN_MS){
-        setScan("hold", "Adjust the card slightly…");
-        stillSince = 0;
-        return;
-      }
-      if(!ocrEngine){ setScan("wait", "Loading OCR engine…"); stillSince = 0; return; }
-      if(!stillSince) stillSince = Date.now();
-      if(Date.now() - stillSince >= AUTO.STABLE_MS){
-        scanState = "reading";
-        setScan("read", "Reading… please hold still");
-        autoReadOnce(t.data);
-      } else {
-        setScan("hold", "Hold still…");
-      }
-    } else {
-      stillSince = 0;
-      setScan("hold", "Hold the card still inside the box…");
-    }
-  }
-
-  async function autoReadOnce(thumbAtTrigger){
-    try {
-      var out = await runOcrCombined();
-      showOcrResult(out);
-      if(out.staff){
-        lockedThumb = thumbAtTrigger;      // remember this card's fingerprint
-        scanState = "locked";
-        setScan("done", "✓ Captured " + out.staff + " — show a different card to scan again");
-      } else {
-        lastFailAt = Date.now();
-        scanState = "idle"; stillSince = 0;
-        setScan("wait", "Couldn't read — reposition the card");
-      }
-    } catch(e){
-      lastFailAt = Date.now();
-      scanState = "idle"; stillSince = 0;
-      setScan("err", "OCR error: " + (e && e.message ? e.message : e));
-    }
-  }
-
-  // Manual fallback (only visible with ?manual=1).
   async function captureAndAnalyze(){
     if(isOcrProcessing) return;
     isOcrProcessing = true;
     var btn = $("snapOcrBtn");
-    btn.disabled = true; btn.textContent = "Processing…";
-    try {
-      var out = await runOcrCombined();
-      showOcrResult(out);
-    } catch(err){
-      setScan("err", "OCR error: " + (err && err.message ? err.message : err));
+    btn.disabled = true; btn.textContent = "Processing OCR…";
+    var v = $("webcam");
+
+    if(v && v.readyState === v.HAVE_ENOUGH_DATA){
+      if(!ocrEngine){ await initOcrEngine(); }
+      try {
+        var still = grabStill(v);
+
+        // Primary pass: normal orientation (raw frames are NOT mirrored).
+        var out = await runPaddle(buildRoi(still, false));
+        var staff = parseStaff(out.text);
+        var orient = "normal";
+
+        // Fallback: if no staff pattern, try a mirrored ROI (covers any
+        // device that hands back a pre-mirrored front-camera frame).
+        if(!staff){
+          var out2 = await runPaddle(buildRoi(still, true));
+          var staff2 = parseStaff(out2.text);
+          if(staff2){ out = out2; staff = staff2; orient = "mirrored"; }
+        }
+
+        var dbg = "\n\n[orientation: " + orient + " · confidence: " + out.conf + "%]";
+        $("ocrRawText").textContent = (out.text || "(No text recognized)") + dbg;
+
+        if (staff) {
+          $("ocrStaffNo").textContent = staff;
+          $("ocrStatus").textContent = "✓ Extracted Successfully";
+          $("ocrStatus").style.color = "#2e7d32";
+        } else if (out.text.length > 0) {
+          $("ocrStaffNo").textContent = out.text.split("\n")[0] || "—";
+          $("ocrStatus").textContent = "Text Found (No Staff No. Format)";
+          $("ocrStatus").style.color = "#b26a00";
+        } else {
+          $("ocrStaffNo").textContent = "—";
+          $("ocrStatus").textContent = "No Text Found";
+          $("ocrStatus").style.color = "#c62828";
+        }
+        closeCamera();
+      } catch(err) {
+        $("camStatus").textContent = "OCR Analysis Error: " + (err && err.message ? err.message : err);
+      }
     }
+
     isOcrProcessing = false;
-    btn.disabled = false; btn.textContent = "📸 Snap now";
+    btn.disabled = false; btn.textContent = "📸 Hold Steady & Snap";
   }
 
   // ---------------- Notion write ----------------
